@@ -1,0 +1,1 @@
+V8 Fast Driving patch: forward target 32 m/s (~115 km/h), reverse 7 m/s (~25 km/h), acceleration 17 m/s2, speed-sensitive steering, horizontal collision filtering. Godot runtime not tested.

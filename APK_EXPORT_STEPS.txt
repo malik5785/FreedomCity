@@ -1,0 +1,8 @@
+1. Import project.godot into Godot 4.7.2.
+2. Run with F6 to check for any remaining errors.
+3. Editor > Manage Export Templates > Download and Install.
+4. Install Android SDK and JDK 17; configure Editor Settings > Export > Android.
+5. Project > Export > Add Android. Set package name com.cityfreedom.makkah.
+6. Export Project with debug signing to CityFreedom-Makkah.apk.
+7. Copy APK to TV and install it after allowing trusted sideloading.
+NOTE: This ZIP contains source only; no APK. Not verified with Godot runtime.

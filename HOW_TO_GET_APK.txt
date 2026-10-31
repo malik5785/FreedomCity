@@ -1,0 +1,11 @@
+GET THE APK WITHOUT INSTALLING ANYTHING (free, ~10 minutes)
+1. Create a free account at github.com, make a new PRIVATE repository.
+2. Upload ALL files of this folder (including the hidden .github folder) to it.
+3. Open the Actions tab > "Build Android APK" > Run workflow.
+4. When it finishes, download the artifact "CityFreedom-Makkah-apk" > unzip > CityFreedom-Makkah.apk.
+5. Copy to a USB stick or use "Send Files to TV"; install with a file manager on the TV
+   (allow "unknown sources"). If the game icon is not in the TV home screen, open it from
+   Settings > Apps, or use the "Sideload Launcher" app.
+Controls on TV: gamepad works (left stick walk, A enter car, Y camera).
+STATUS: V10 was written without running it. The build now has a smoke test; if it fails open the log and send it to me.
+send me the red error text from the Actions log and I will fix it.
