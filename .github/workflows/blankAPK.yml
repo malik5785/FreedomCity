@@ -1,0 +1,46 @@
+name: Build Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Godot templates and Android signing
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates ~/.config/godot build
+          mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable 2>/dev/null || true
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            -keystore debug.keystore -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          cat > ~/.config/godot/editor_settings-4.tres <<EOT
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/android_sdk_path = "${ANDROID_HOME:-/usr/lib/android-sdk}"
+          export/android/debug_keystore = "$PWD/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          export/android/java_sdk_path = "${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}"
+          EOT
+      - name: Smoke test (loads the game headless; fails on script errors)
+        run: |
+          godot --headless --import || true
+          godot --headless --path . --quit-after 300 2>&1 | tee run.log || true
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load script" run.log; then echo "GAME SCRIPT ERRORS FOUND - see above"; exit 1; fi
+      - name: Import and export APK
+        run: |
+          godot --headless --import || true
+          godot --headless --export-debug "Android" build/CityFreedom-Makkah.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-log
+          path: run.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CityFreedom-Makkah-apk
+          path: build/CityFreedom-Makkah.apk
