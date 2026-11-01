@@ -90,7 +90,10 @@ var player_vel := Vector3.ZERO
 # batching / materials
 var render_chunks := []
 var render_cull_clock := 0.0
-const RENDER_RANGE_SQ := 1500.0 * 1500.0
+var simulation_clock := 0.0
+var joystick_axes := {}
+var joystick_device := -1
+const RENDER_RANGE_SQ := 800.0 * 800.0
 var batches := {}
 var batch_part := {}
 var batch_cnt := {}
@@ -1129,7 +1132,7 @@ func _create_npcs() -> void:
 			npc_roads.append(sg)
 	if npc_roads.empty():
 		return
-	var n_npc := 30
+	var n_npc := 14
 	for i in range(n_npc):
 		var si := rng.randi_range(0, npc_roads.size() - 1)
 		var seg: Array = npc_roads[si]
@@ -1430,7 +1433,7 @@ func _create_traffic() -> void:
 	if routes.empty():
 		return
 	var kinds := [0, 1, 0, 6, 2, 1, 3, 0, 7, 8, 1, 4, 0, 5, 6, 7, 1, 0, 8, 2, 0, 3, 1, 6, 0, 4]
-	for i in range(kinds.size()):
+	for i in range(min(kinds.size(), 14)):
 		var route: Array = routes[rng.randi_range(0, routes.size() - 1)]
 		var seg := rng.randi_range(0, route.size() - 2)
 		for tries in range(12):
@@ -1923,16 +1926,29 @@ func _resize_ui() -> void:
 
 # ---------------------------------------------------------------- input
 func _active_joy() -> int:
+	if joystick_device >= 0:
+		return joystick_device
 	var devices := Input.get_connected_joypads()
 	return int(devices[0]) if devices.size() > 0 else 0
 
+func _joy_value(axis: int) -> float:
+	var device := _active_joy()
+	var live := Input.get_joy_axis(device, axis)
+	var saved: float = float(joystick_axes.get(axis, 0.0))
+	return saved if abs(saved) > abs(live) else live
+
 func _axis(negative: int, positive: int, joy_axis: int) -> float:
-	var value := Input.get_joy_axis(_active_joy(), joy_axis)
+	var value := _joy_value(joy_axis)
 	if abs(value) < 0.18:
 		value = 0.0
 	return clamp(value + float(Input.is_key_pressed(positive)) - float(Input.is_key_pressed(negative)), -1.0, 1.0)
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventJoypadMotion:
+		joystick_device = event.device
+		joystick_axes[event.axis] = event.axis_value
+	if event is InputEventJoypadButton:
+		joystick_device = event.device
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED and not wardrobe_open:
 		yaw -= event.relative.x * 0.003
 		pitch = clamp(pitch - event.relative.y * 0.002, -0.75, 0.45)
@@ -2070,9 +2086,15 @@ func _physics_process(delta: float) -> void:
 	if selftest and frame_count > 240:
 		get_tree().quit()
 	_update_time(delta)
-	_advance_traffic(delta)
-	_update_npcs(delta)
-	_update_pilgrims(delta)
+	# Crowd and traffic simulation is expensive on low-power Android TV hardware.
+	# Run it at 10 Hz with accumulated delta while keeping player movement at physics rate.
+	simulation_clock += delta
+	if simulation_clock >= 0.10:
+		var sim_dt := min(simulation_clock, 0.2)
+		simulation_clock = 0.0
+		_advance_traffic(sim_dt)
+		_update_npcs(sim_dt)
+		_update_pilgrims(sim_dt)
 	if wardrobe_open:
 		_wardrobe_camera(delta)
 		_update_hud(delta)
@@ -2088,8 +2110,8 @@ func _physics_process(delta: float) -> void:
 	var arrows_turn := float(Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_LEFT))
 	var arrows_move := float(Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_UP))
 	ly = clamp(ly + arrows_move, -1.0, 1.0)
-	var rx := Input.get_joy_axis(_active_joy(), 2)
-	var ry := Input.get_joy_axis(_active_joy(), 3)
+	var rx := _joy_value(2)
+	var ry := _joy_value(3)
 	if abs(rx) > 0.15:
 		yaw -= rx * delta * 2.2
 	if abs(ry) > 0.15:
@@ -2098,8 +2120,8 @@ func _physics_process(delta: float) -> void:
 		var steer_in: float = clamp(lx + arrows_turn, -1.0, 1.0)
 		var gas_key: float = clamp(float(Input.is_key_pressed(KEY_W)) + float(Input.is_key_pressed(KEY_UP)), 0.0, 1.0)
 		var brake_key: float = clamp(float(Input.is_key_pressed(KEY_S)) + float(Input.is_key_pressed(KEY_DOWN)), 0.0, 1.0)
-		var gas: float = clamp(max(max(0.0, Input.get_joy_axis(_active_joy(), 7)), max(gas_key, max(0.0, -ly))), 0.0, 1.0)
-		var brake: float = clamp(max(max(0.0, Input.get_joy_axis(_active_joy(), 6)), max(brake_key, max(0.0, ly))), 0.0, 1.0)
+		var gas: float = clamp(max(max(0.0, _joy_value(7)), max(gas_key, max(0.0, -ly))), 0.0, 1.0)
+		var brake: float = clamp(max(max(0.0, _joy_value(6)), max(brake_key, max(0.0, ly))), 0.0, 1.0)
 		var top_speed := 32.0
 		if int(car_kinds[active_car_index]) == 4:
 			top_speed = 20.0
