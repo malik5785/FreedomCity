@@ -1,0 +1,54 @@
+name: Build Android APK (Godot 3.6 GLES2 - for older Android TVs)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 3.6 and its export templates
+        run: |
+          set -e
+          GV=""
+          for V in 3.6.3 3.6.2 3.6.1 3.6; do
+            if curl -fsIL "https://github.com/godotengine/godot/releases/download/${V}-stable/Godot_v${V}-stable_linux_headless.64.zip" > /dev/null; then GV=$V; break; fi
+          done
+          if [ -z "$GV" ]; then echo "No Godot 3.6 download found"; exit 1; fi
+          echo "Using Godot $GV"
+          wget -q "https://github.com/godotengine/godot/releases/download/${GV}-stable/Godot_v${GV}-stable_linux_headless.64.zip"
+          wget -q "https://github.com/godotengine/godot/releases/download/${GV}-stable/Godot_v${GV}-stable_export_templates.tpz"
+          unzip -q "Godot_v${GV}-stable_linux_headless.64.zip"
+          sudo mv "Godot_v${GV}-stable_linux_headless.64" /usr/local/bin/godot
+          mkdir -p ~/.local/share/godot/templates
+          unzip -q "Godot_v${GV}-stable_export_templates.tpz"
+          mv templates ~/.local/share/godot/templates/${GV}.stable
+          godot --version
+      - name: Android signing and SDK settings
+        run: |
+          mkdir -p ~/.config/godot build
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore "$PWD/debug.keystore" -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          JS="$(command -v jarsigner)"
+          printf '[gd_resource type="EditorSettings" format=2]\n\n[resource]\n\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\nexport/android/jarsigner = "%s"\nexport/android/force_system_user = false\nexport/android/shutdown_adb_on_exit = true\n' "$SDK" "$PWD" "$JS" > ~/.config/godot/editor_settings-3.tres
+          cat ~/.config/godot/editor_settings-3.tres
+      - name: Import project
+        run: godot --path . --editor --quit || true
+      - name: Smoke test (runs the game for 240 frames, fails on script errors)
+        run: |
+          timeout 180 godot --path . --quit-after 240 --selftest 2>&1 | tee run.log || true
+          if grep -Ei "SCRIPT ERROR|Parse Error|Failed to load script|Compile Error|Parser Error" run.log; then echo "GAME SCRIPT ERRORS FOUND - see above"; exit 1; fi
+      - name: Export APK
+        run: |
+          godot --path . --export-debug "Android" build/CityFreedom-Makkah.apk
+          test -s build/CityFreedom-Makkah.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-log
+          path: run.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CityFreedom-Makkah-apk
+          path: build/CityFreedom-Makkah.apk

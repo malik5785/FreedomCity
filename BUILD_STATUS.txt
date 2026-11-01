@@ -1,7 +1,0 @@
-CITY FREEDOM — MAKKAH | GRAPHICS DEVELOPMENT BUILD
-
-Actual changes: richer procedural building facades, framed windows, roofline details, storefront doors, road-edge lines, vehicle mirrors/bumper/trim/rims, sun shadows, filmic tone mapping and 3D antialiasing. Previous continuous NPC and faster driving code preserved.
-
-IMPORTANT: This is not a complete georeferenced Makkah map, photorealistic asset pack, fully rigged photo-based character, or tested Android APK. Roads remain an artistic approximation. No Godot runtime is installed here to test this source.
-
-To run: Import project.godot in Godot 4.x and launch main.tscn.

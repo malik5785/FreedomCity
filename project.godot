@@ -1,32 +1,22 @@
 ; Engine configuration file.
-; It's best edited using the editor UI and not directly,
-; since the parameters that go here are not all obvious.
-;
-; Format:
-;   [section] ; section goes between []
-;   param=value ; assign values to parameters
-
-config_version=5
-
-[animation]
-
-compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+config_version=4
 
 [application]
 
-config/name="City Freedom - Makkah Graphics Development"
+config/name="City Freedom Makkah"
 run/main_scene="res://main.tscn"
 config/quit_on_go_back=false
-config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.png"
 
 [display]
 
-window/size/viewport_width=960
-window/size/viewport_height=540
-window/stretch/mode="canvas_items"
+window/size/width=1280
+window/size/height=720
+window/handheld/orientation="landscape"
 
 [rendering]
 
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
-anti_aliasing/quality/msaa_3d=2
+quality/driver/driver_name="GLES2"
+vram_compression/import_etc=true
+vram_compression/import_etc2=true
+quality/filters/msaa=0
