@@ -88,6 +88,9 @@ var pilgrims := []
 var player_vel := Vector3.ZERO
 
 # batching / materials
+var render_chunks := []
+var render_cull_clock := 0.0
+const RENDER_RANGE_SQ := 1500.0 * 1500.0
 var batches := {}
 var batch_part := {}
 var batch_cnt := {}
@@ -132,6 +135,7 @@ func _ready() -> void:
 	camera.far = 6000.0
 	add_child(camera)
 	_flush_batches()
+	_cull_render_chunks()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _notification(what: int) -> void:
@@ -351,7 +355,19 @@ func _flush_batches() -> void:
 		if ks.begins_with("r:") or ks.begins_with("d:") or ks.begins_with("g:"):
 			mi.cast_shadow = GeometryInstance.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
+		var parts := ks.split("|")
+		if parts.size() >= 5:
+			var center := Vector2((int(parts[1]) + 0.5) * CHUNK, (int(parts[2]) + 0.5) * CHUNK)
+			render_chunks.append([mi, center])
 	batches.clear()
+
+func _cull_render_chunks() -> void:
+	var focus: Vector3 = car.translation if driving else player.translation
+	var at := Vector2(focus.x, focus.z)
+	for entry in render_chunks:
+		var center: Vector2 = entry[1]
+		(entry[0] as MeshInstance).visible = center.distance_squared_to(at) < RENDER_RANGE_SQ
+
 
 func _solid(pos: Vector3, size: Vector3, yaw_rot: float = 0.0) -> void:
 	var body := StaticBody.new()
@@ -2043,6 +2059,10 @@ func _update_time(delta: float) -> void:
 # ---------------------------------------------------------------- main loop
 func _physics_process(delta: float) -> void:
 	frame_count += 1
+	render_cull_clock += delta
+	if render_cull_clock >= 0.4:
+		render_cull_clock = 0.0
+		_cull_render_chunks()
 	if selftest and frame_count > 240:
 		get_tree().quit()
 	_update_time(delta)
