@@ -1922,8 +1922,12 @@ func _resize_ui() -> void:
 	ui_root.rect_position = (actual - ui_base_size * factor) * 0.5
 
 # ---------------------------------------------------------------- input
+func _active_joy() -> int:
+	var devices := Input.get_connected_joypads()
+	return int(devices[0]) if devices.size() > 0 else 0
+
 func _axis(negative: int, positive: int, joy_axis: int) -> float:
-	var value := Input.get_joy_axis(0, joy_axis)
+	var value := Input.get_joy_axis(_active_joy(), joy_axis)
 	if abs(value) < 0.18:
 		value = 0.0
 	return clamp(value + float(Input.is_key_pressed(positive)) - float(Input.is_key_pressed(negative)), -1.0, 1.0)
@@ -2076,11 +2080,16 @@ func _physics_process(delta: float) -> void:
 		return
 	var lx := _axis(KEY_A, KEY_D, 0)
 	var ly := _axis(KEY_W, KEY_S, 1)
+	# Android TV remotes and many controllers send D-pad as buttons rather than axes.
+	lx += float(Input.is_joy_button_pressed(_active_joy(), 15)) - float(Input.is_joy_button_pressed(_active_joy(), 14))
+	ly += float(Input.is_joy_button_pressed(_active_joy(), 13)) - float(Input.is_joy_button_pressed(_active_joy(), 12))
+	lx = clamp(lx, -1.0, 1.0)
+	ly = clamp(ly, -1.0, 1.0)
 	var arrows_turn := float(Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_LEFT))
 	var arrows_move := float(Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_UP))
 	ly = clamp(ly + arrows_move, -1.0, 1.0)
-	var rx := Input.get_joy_axis(0, 2)
-	var ry := Input.get_joy_axis(0, 3)
+	var rx := Input.get_joy_axis(_active_joy(), 2)
+	var ry := Input.get_joy_axis(_active_joy(), 3)
 	if abs(rx) > 0.15:
 		yaw -= rx * delta * 2.2
 	if abs(ry) > 0.15:
@@ -2089,8 +2098,8 @@ func _physics_process(delta: float) -> void:
 		var steer_in: float = clamp(lx + arrows_turn, -1.0, 1.0)
 		var gas_key: float = clamp(float(Input.is_key_pressed(KEY_W)) + float(Input.is_key_pressed(KEY_UP)), 0.0, 1.0)
 		var brake_key: float = clamp(float(Input.is_key_pressed(KEY_S)) + float(Input.is_key_pressed(KEY_DOWN)), 0.0, 1.0)
-		var gas: float = clamp(max(max(0.0, Input.get_joy_axis(0, 7)), max(gas_key, max(0.0, -ly))), 0.0, 1.0)
-		var brake: float = clamp(max(max(0.0, Input.get_joy_axis(0, 6)), max(brake_key, max(0.0, ly))), 0.0, 1.0)
+		var gas: float = clamp(max(max(0.0, Input.get_joy_axis(_active_joy(), 7)), max(gas_key, max(0.0, -ly))), 0.0, 1.0)
+		var brake: float = clamp(max(max(0.0, Input.get_joy_axis(_active_joy(), 6)), max(brake_key, max(0.0, ly))), 0.0, 1.0)
 		var top_speed := 32.0
 		if int(car_kinds[active_car_index]) == 4:
 			top_speed = 20.0
