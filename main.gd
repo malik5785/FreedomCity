@@ -347,8 +347,7 @@ func _flush_batches() -> void:
 			vis = 4500.0
 		elif ks.begins_with("f:") or ks.begins_with("w:"):
 			vis = 850.0
-		mi.lod_max_distance = vis
-		mi.lod_max_hysteresis = 60.0
+
 		if ks.begins_with("r:") or ks.begins_with("d:") or ks.begins_with("g:"):
 			mi.cast_shadow = GeometryInstance.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
@@ -1356,7 +1355,7 @@ func _make_vehicle(pos: Vector3, heading: float, color_hex: String, kind: int, m
 	var vsize := _vehicle_size(kind)
 	var cs := CollisionShape.new()
 	var bs := BoxShape.new()
-	bs.size = vsize
+	bs.extents = vsize * 0.5
 	cs.shape = bs
 	cs.translation.y = vsize.y * 0.5 + 0.1
 	v.add_child(cs)
