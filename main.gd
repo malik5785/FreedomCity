@@ -90,7 +90,7 @@ var player_vel := Vector3.ZERO
 # batching / materials
 var render_chunks := []
 var render_cull_clock := 0.0
-var simulation_clock := 0.0
+var hud_update_clock := 0.0
 var joystick_axes := {}
 var joystick_device := -1
 const RENDER_RANGE_SQ := 800.0 * 800.0
@@ -2086,15 +2086,11 @@ func _physics_process(delta: float) -> void:
 	if selftest and frame_count > 240:
 		get_tree().quit()
 	_update_time(delta)
-	# Crowd and traffic simulation is expensive on low-power Android TV hardware.
-	# Run it at 10 Hz with accumulated delta while keeping player movement at physics rate.
-	simulation_clock += delta
-	if simulation_clock >= 0.10:
-		var sim_dt := min(simulation_clock, 0.2)
-		simulation_clock = 0.0
-		_advance_traffic(sim_dt)
-		_update_npcs(sim_dt)
-		_update_pilgrims(sim_dt)
+	# move_and_slide uses the engine physics timestep, so cars and pedestrians
+	# must be advanced on every physics tick (10 Hz made them ~6x slower).
+	_advance_traffic(delta)
+	_update_npcs(delta)
+	_update_pilgrims(delta)
 	if wardrobe_open:
 		_wardrobe_camera(delta)
 		_update_hud(delta)
@@ -2165,7 +2161,10 @@ func _physics_process(delta: float) -> void:
 					step_audio.play()
 		_animate_walker(player_visual, walk_clock, moving)
 	_update_camera()
-	_update_hud(delta)
+	hud_update_clock += delta
+	if hud_update_clock >= 0.12:
+		_update_hud(hud_update_clock)
+		hud_update_clock = 0.0
 	_update_labels(delta)
 
 func _update_camera() -> void:
