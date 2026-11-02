@@ -91,6 +91,7 @@ var player_vel := Vector3.ZERO
 var render_chunks := []
 var render_cull_clock := 0.0
 var hud_update_clock := 0.0
+var environment_update_clock := 0.0
 var joystick_axes := {}
 var joystick_device := -1
 const RENDER_RANGE_SQ := 800.0 * 800.0
@@ -2085,7 +2086,10 @@ func _physics_process(delta: float) -> void:
 		_cull_render_chunks()
 	if selftest and frame_count > 240:
 		get_tree().quit()
-	_update_time(delta)
+	environment_update_clock += delta
+	if environment_update_clock >= 0.10:
+		_update_time(environment_update_clock)
+		environment_update_clock = 0.0
 	# move_and_slide uses the engine physics timestep, so cars and pedestrians
 	# must be advanced on every physics tick (10 Hz made them ~6x slower).
 	_advance_traffic(delta)
