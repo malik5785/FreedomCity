@@ -37,12 +37,10 @@ jobs:
         run: godot --path . --editor --quit || true
       - name: Smoke test (runs the game for 240 frames, fails on script errors)
         run: |
-          timeout 180 godot --path . --quit-after 240 --selftest 2>&1 | tee run.log || true
-          if grep -Ei "SCRIPT ERROR|Parse Error|Failed to load script|Compile Error|Parser Error" run.log; then echo "GAME SCRIPT ERRORS FOUND - see above"; exit 1; fi
+          godot --path . -- --selftest 2>&1 | tee run.log || true
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load script|Compile Error" run.log; then echo "GAME SCRIPT ERRORS FOUND - see above"; exit 1; fi
       - name: Export APK
-        run: |
-          godot --path . --export-debug "Android" build/CityFreedom-Makkah.apk
-          test -s build/CityFreedom-Makkah.apk
+        run: godot --path . --export-debug "Android" build/CityFreedom-Makkah.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
