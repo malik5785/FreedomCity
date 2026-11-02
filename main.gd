@@ -92,6 +92,7 @@ var render_chunks := []
 var render_cull_clock := 0.0
 var building_collision_cells := {}
 var active_collision_cells := {}
+var cached_collision_cells := {}
 var collision_clock := 0.0
 const COLLISION_CELL := 250.0
 const COLLISION_RADIUS := 420.0
@@ -743,14 +744,25 @@ func _city_building(b: Dictionary) -> void:
 func _stream_building_collisions() -> void:
 	var pos: Vector3 = car.translation if driving else player.translation
 	var at := Vector2(pos.x, pos.z)
-	for cell in building_collision_cells.keys():
-		var center := (cell as Vector2) * COLLISION_CELL + Vector2(COLLISION_CELL * 0.5, COLLISION_CELL * 0.5)
-		var nearby := center.distance_squared_to(at) < (COLLISION_RADIUS * COLLISION_RADIUS)
-		if not nearby and active_collision_cells.has(cell):
+	# Disable distant cached bodies, reactivate them when revisited.
+	for cell in active_collision_cells.keys():
+		var center: Vector2 = cell * COLLISION_CELL + Vector2(COLLISION_CELL * 0.5, COLLISION_CELL * 0.5)
+		if center.distance_squared_to(at) > COLLISION_RADIUS * COLLISION_RADIUS:
 			for body in active_collision_cells[cell]:
 				(body as StaticBody).collision_layer = 0
+			cached_collision_cells[cell] = active_collision_cells[cell]
 			active_collision_cells.erase(cell)
-		elif nearby and not active_collision_cells.has(cell):
+	for cell in cached_collision_cells.keys():
+		var center: Vector2 = cell * COLLISION_CELL + Vector2(COLLISION_CELL * 0.5, COLLISION_CELL * 0.5)
+		if center.distance_squared_to(at) <= COLLISION_RADIUS * COLLISION_RADIUS:
+			for body in cached_collision_cells[cell]:
+				(body as StaticBody).collision_layer = 1
+			active_collision_cells[cell] = cached_collision_cells[cell]
+			cached_collision_cells.erase(cell)
+	# Generate each cell only on first approach.
+	for cell in building_collision_cells.keys():
+		var center: Vector2 = cell * COLLISION_CELL + Vector2(COLLISION_CELL * 0.5, COLLISION_CELL * 0.5)
+		if center.distance_squared_to(at) <= COLLISION_RADIUS * COLLISION_RADIUS:
 			var bodies := []
 			for item in building_collision_cells[cell]:
 				var body: StaticBody = _building_collision(item[0], item[1], item[2], item[3], item[4])
