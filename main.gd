@@ -31,7 +31,7 @@ var moon_mesh: MeshInstance
 var cloud_nodes := []
 var cloud_mat: SpatialMaterial
 var player_visual: Spatial
-var outfit := {"top": 0, "bottom": 0, "shoes": 0, "head": 0, "glasses": 0, "hero": true}
+var outfit := {"top": 0, "bottom": 0, "shoes": 0, "head": 0, "glasses": 0}
 var wardrobe_open := false
 var wardrobe_panel: Control
 var wardrobe_row := 0
@@ -86,21 +86,14 @@ var npc_speed := []
 var npc_clock := []
 var pilgrims := []
 var player_vel := Vector3.ZERO
+var collision_cells := {}
+var live_collision_cells := {}
+var collision_update_clock := 0.0
+var environment_update_clock := 0.0
+const COLLISION_CELL_SIZE := 220.0
+const COLLISION_LOAD_DISTANCE := 340.0
 
 # batching / materials
-var render_chunks := []
-var render_cull_clock := 0.0
-var building_collision_cells := {}
-var active_collision_cells := {}
-var cached_collision_cells := {}
-var collision_clock := 0.0
-const COLLISION_CELL := 250.0
-const COLLISION_RADIUS := 420.0
-var hud_update_clock := 0.0
-var environment_update_clock := 0.0
-var joystick_axes := {}
-var joystick_device := -1
-const RENDER_RANGE_SQ := 800.0 * 800.0
 var batches := {}
 var batch_part := {}
 var batch_cnt := {}
@@ -145,9 +138,33 @@ func _ready() -> void:
 	camera.far = 6000.0
 	add_child(camera)
 	_flush_batches()
-	_cull_render_chunks()
-	_stream_building_collisions()
+	_apply_quality()
+	_stream_collisions()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+func _process(delta: float) -> void:
+	fps_timer += delta
+	if fps_timer < 2.0:
+		return
+	fps_timer = 0.0
+	var fps := Engine.get_frames_per_second()
+	if fps < 24 and quality_scale > 0.3:
+		quality_scale = max(0.3, quality_scale * 0.8)
+		_apply_quality()
+	elif fps > 50 and quality_scale < 1.0:
+		quality_scale = min(1.0, quality_scale * 1.15)
+		_apply_quality()
+	if fps_label != null:
+		fps_label.text = "FPS %d  QUALITY %d%%" % [fps, int(quality_scale * 100.0)]
+
+func _apply_quality() -> void:
+	var focus: Vector3 = car.translation if driving else player.translation
+	for e in quality_meshes:
+		if is_instance_valid(e[0]):
+			var node: MeshInstance = e[0]
+			var origin: Vector3 = e[2] if e.size() > 2 else node.global_transform.origin
+			var range_m: float = float(e[1]) * quality_scale
+			node.visible = origin.distance_squared_to(focus) <= range_m * range_m
 
 func _notification(what: int) -> void:
 	if what == MainLoop.NOTIFICATION_WM_GO_BACK_REQUEST:
@@ -235,13 +252,18 @@ func _mat_key(c: Color) -> String:
 	return "c:" + c.to_html(false)
 
 func _get_mat(key: String) -> SpatialMaterial:
-	key = key.replace("#sky", "")
+	key = key.replace("#sky", "").replace("#mid", "")
 	if mats.has(key):
 		return mats[key]
 	var m := SpatialMaterial.new()
 	m.roughness = 1.0
 	m.metallic = 0.0
-	if key.begins_with("c:"):
+	m.params_specular_mode = SpatialMaterial.SPECULAR_DISABLED
+	m.params_diffuse_mode = SpatialMaterial.DIFFUSE_LAMBERT
+	if key == "v:white":
+		m.vertex_color_use_as_albedo = true
+		m.albedo_color = Color(1, 1, 1)
+	elif key.begins_with("c:"):
 		m.albedo_color = Color(key.substr(2))
 	elif key.begins_with("d:"):
 		m.albedo_color = Color(key.substr(2))
@@ -357,28 +379,25 @@ func _flush_batches() -> void:
 		var mi := MeshInstance.new()
 		mi.mesh = st.commit()
 		var ks := str(key)
-		var vis := 520.0
+		var vis := 330.0
+		var scaled := true
 		if "#sky" in ks:
 			vis = 4500.0
+			scaled = false
+		elif "#mid" in ks:
+			vis = 1500.0
 		elif ks.begins_with("f:") or ks.begins_with("w:"):
-			vis = 850.0
-
+			vis = 520.0
+		if scaled:
+			var parts := ks.split("|")
+			var center := Vector3.ZERO
+			if parts.size() >= 5:
+				center = Vector3((int(parts[1]) + 0.5) * CHUNK, 0.0, (int(parts[2]) + 0.5) * CHUNK)
+			quality_meshes.append([mi, vis, center])
 		if ks.begins_with("r:") or ks.begins_with("d:") or ks.begins_with("g:"):
 			mi.cast_shadow = GeometryInstance.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
-		var parts := ks.split("|")
-		if parts.size() >= 5:
-			var center := Vector2((int(parts[1]) + 0.5) * CHUNK, (int(parts[2]) + 0.5) * CHUNK)
-			render_chunks.append([mi, center])
 	batches.clear()
-
-func _cull_render_chunks() -> void:
-	var focus: Vector3 = car.translation if driving else player.translation
-	var at := Vector2(focus.x, focus.z)
-	for entry in render_chunks:
-		var center: Vector2 = entry[1]
-		(entry[0] as MeshInstance).visible = center.distance_squared_to(at) < RENDER_RANGE_SQ
-
 
 func _solid(pos: Vector3, size: Vector3, yaw_rot: float = 0.0) -> void:
 	var body := StaticBody.new()
@@ -470,13 +489,13 @@ func _create_world() -> void:
 	cloud_mat.flags_unshaded = true
 	cloud_mat.flags_transparent = true
 	cloud_mat.albedo_color = Color(1, 1, 1, 0.9)
-	for i in range(22):
+	for i in range(7):
 		var cloud := Spatial.new()
 		cloud.translation = Vector3(rng.randf_range(world_min.x - 600.0, world_max.x + 600.0), rng.randf_range(140, 240), rng.randf_range(world_min.y - 600.0, world_max.y + 600.0))
-		for k in range(4):
+		for k in range(3):
 			var puff := MeshInstance.new()
 			var pm := SphereMesh.new()
-			pm.radius = rng.randf_range(30, 55)
+			pm.radius = rng.randf_range(35, 50)
 			pm.height = pm.radius * 1.1
 			pm.radial_segments = 8
 			pm.rings = 4
@@ -686,7 +705,7 @@ func _city_building(b: Dictionary) -> void:
 	for i in range(outer_n):
 		cen += verts[i] as Vector2
 	cen /= float(outer_n)
-	var sky := "#sky" if h > 70.0 else ""
+	var sky := "#sky" if h > 150.0 else ("#mid" if h > 70.0 else "")
 	var wall_key := "f:" + hex + sky
 	var roof_key := "w:b8ad98" + sky
 	if kind == "kaaba":
@@ -731,45 +750,36 @@ func _city_building(b: Dictionary) -> void:
 	var en: String = b["n"]
 	var open_mosque := area > 60000.0 or "Great Mosque" in en or "Grand Mosque" in en
 	if not open_mosque and mh < 3.0 and h - mh > 2.0 and area > 6.0:
-		# Stream collision geometry near the player instead of creating
-		# thousands of active physics bodies across the entire city.
-		var cell := Vector2(int(floor(cen.x / COLLISION_CELL)), int(floor(cen.y / COLLISION_CELL)))
-		if not building_collision_cells.has(cell):
-			building_collision_cells[cell] = []
-		building_collision_cells[cell].append([verts, rs, mh, h, area > 2500.0])
+		var cell := Vector2(floor(cen.x / COLLISION_CELL_SIZE), floor(cen.y / COLLISION_CELL_SIZE))
+		if not collision_cells.has(cell):
+			collision_cells[cell] = []
+		collision_cells[cell].append([verts, rs, mh, h, area > 2500.0])
 	if en != "":
 		var col := Color(1.0, 0.86, 0.5) if kind == "hotel" else Color(1, 1, 1)
 		label_items.append([Vector3(cen.x, h + 6.0, cen.y), en, col, 260.0 if h < 100.0 else 900.0])
 
-func _stream_building_collisions() -> void:
-	var pos: Vector3 = car.translation if driving else player.translation
-	var at := Vector2(pos.x, pos.z)
-	# Disable distant cached bodies, reactivate them when revisited.
-	for cell in active_collision_cells.keys():
-		var center: Vector2 = cell * COLLISION_CELL + Vector2(COLLISION_CELL * 0.5, COLLISION_CELL * 0.5)
-		if center.distance_squared_to(at) > COLLISION_RADIUS * COLLISION_RADIUS:
-			for body in active_collision_cells[cell]:
-				(body as StaticBody).collision_layer = 0
-			cached_collision_cells[cell] = active_collision_cells[cell]
-			active_collision_cells.erase(cell)
-	for cell in cached_collision_cells.keys():
-		var center: Vector2 = cell * COLLISION_CELL + Vector2(COLLISION_CELL * 0.5, COLLISION_CELL * 0.5)
-		if center.distance_squared_to(at) <= COLLISION_RADIUS * COLLISION_RADIUS:
-			for body in cached_collision_cells[cell]:
-				(body as StaticBody).collision_layer = 1
-			active_collision_cells[cell] = cached_collision_cells[cell]
-			cached_collision_cells.erase(cell)
-	# Generate each cell only on first approach.
-	for cell in building_collision_cells.keys():
-		var center: Vector2 = cell * COLLISION_CELL + Vector2(COLLISION_CELL * 0.5, COLLISION_CELL * 0.5)
-		if center.distance_squared_to(at) <= COLLISION_RADIUS * COLLISION_RADIUS:
+func _stream_collisions() -> void:
+	var focus: Vector3 = car.translation if driving else player.translation
+	var center := Vector2(focus.x, focus.z)
+	var limit_sq := COLLISION_LOAD_DISTANCE * COLLISION_LOAD_DISTANCE
+	for cell in live_collision_cells.keys():
+		var cp: Vector2 = cell * COLLISION_CELL_SIZE + Vector2(COLLISION_CELL_SIZE * 0.5, COLLISION_CELL_SIZE * 0.5)
+		if cp.distance_squared_to(center) > limit_sq:
+			for body in live_collision_cells[cell]:
+				if is_instance_valid(body):
+					body.queue_free()
+			live_collision_cells.erase(cell)
+	for cell in collision_cells.keys():
+		if live_collision_cells.has(cell):
+			continue
+		var cp: Vector2 = cell * COLLISION_CELL_SIZE + Vector2(COLLISION_CELL_SIZE * 0.5, COLLISION_CELL_SIZE * 0.5)
+		if cp.distance_squared_to(center) <= limit_sq:
 			var bodies := []
-			for item in building_collision_cells[cell]:
-				var body: StaticBody = _building_collision(item[0], item[1], item[2], item[3], item[4])
+			for item in collision_cells[cell]:
+				var body = _building_collision(item[0], item[1], item[2], item[3], item[4])
 				if body != null:
 					bodies.append(body)
-			active_collision_cells[cell] = bodies
-			building_collision_cells.erase(cell)
+			live_collision_cells[cell] = bodies
 
 func _building_collision(verts: Array, rs: Array, mh: float, h: float, big: bool) -> StaticBody:
 	var body := StaticBody.new()
@@ -992,7 +1002,8 @@ func _update_pilgrims(delta: float) -> void:
 		p[4] = float(p[4]) + delta * 6.0
 		node.translation = Vector3(cos(ang) * r, 0.1, sin(ang) * r)
 		node.rotation.y = atan2(sin(ang), -cos(ang))
-		_animate_walker(node.get_meta("visual"), float(p[4]), true)
+		if node.translation.distance_squared_to(camera.translation) < 6400.0:
+			_animate_walker(node.get_meta("visual"), float(p[4]), true)
 # ---------------------------------------------------------------- people
 const TOPS = [["White thobe", "f4f1e8", 0], ["Black thobe", "1d1f24", 0], ["Cream thobe", "d9c9a0", 0], ["Blue shirt", "3a6ea5", 1], ["Red shirt", "b03a2e", 1], ["Green jacket", "3e6b4a", 1]]
 const BOTTOMS = [["Dark jeans", "2b3a55"], ["Khaki", "b5a278"], ["Black pants", "1c1c1e"], ["Grey pants", "6b6f75"]]
@@ -1000,21 +1011,78 @@ const SHOES = [["White sneakers", "f2f2f2"], ["Black shoes", "151515"], ["Brown 
 const HEADS = [["No head wear", ""], ["White ghutra", "f6f6f2"], ["Red ghutra", "c0392b"], ["Black cap", "1b1b1b"], ["White kufi", "ecece6"]]
 const GLASSES = [["No glasses", false], ["Sunglasses", true]]
 
-func _pm(spec: String) -> SpatialMaterial:
-	if spec.begins_with("p:") or spec.begins_with("e:") or spec.begins_with("flash") or spec.begins_with("win"):
-		return _get_mat(spec)
-	return _get_mat("c:" + spec)
+var builders := {}
+var arrays_cache := {}
+var quality_meshes := []
+var quality_scale := 0.6
+var fps_label: Label
+var fps_timer := 0.0
+var joy_device := -1
+var joy_axes := {}
+var quality_clock := 0.0
+var env_acc := 0.0
 
-func _mi(parent: Spatial, mesh: Mesh, pos: Vector3, hex: String) -> MeshInstance:
-	var n := MeshInstance.new()
-	n.mesh = mesh
-	n.material_override = _pm(hex)
-	n.translation = pos
-	parent.add_child(n)
-	return n
+func _spec_color(spec: String) -> Color:
+	var s := spec
+	if s.begins_with("p:") or s.begins_with("c:") or s.begins_with("e:"):
+		s = s.substr(2)
+	return Color(s)
 
-func _bxm(parent: Spatial, pos: Vector3, size: Vector3, hex: String) -> MeshInstance:
-	return _mi(parent, _bm(size), pos, hex)
+# Parts are merged into ONE mesh per node (1 draw call instead of ~40 per person/car).
+func _mi(parent: Spatial, mesh: Mesh, pos: Vector3, hex: String, rot: Vector3 = Vector3.ZERO) -> void:
+	if hex.begins_with("flash"):
+		var n := MeshInstance.new()
+		n.mesh = mesh
+		n.material_override = _get_mat(hex)
+		n.translation = pos
+		n.rotation = rot
+		n.cast_shadow = GeometryInstance.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(n)
+		return
+	var key := parent.get_instance_id()
+	var entry: Array
+	if builders.has(key):
+		entry = builders[key]
+	else:
+		var st0 := SurfaceTool.new()
+		st0.begin(Mesh.PRIMITIVE_TRIANGLES)
+		st0.set_material(_get_mat("v:white"))
+		entry = [st0, parent]
+		builders[key] = entry
+	var st: SurfaceTool = entry[0]
+	var mid := mesh.get_instance_id()
+	var arrays: Array
+	if arrays_cache.has(mid):
+		arrays = arrays_cache[mid]
+	else:
+		arrays = mesh.surface_get_arrays(0)
+		arrays_cache[mid] = arrays
+	var verts: PoolVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var norms: PoolVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var idx: PoolIntArray = arrays[Mesh.ARRAY_INDEX]
+	var xb := Basis(rot)
+	var col := _spec_color(hex)
+	var count := idx.size() if idx.size() > 0 else verts.size()
+	for k in range(count):
+		var vi: int = idx[k] if idx.size() > 0 else k
+		st.add_color(col)
+		st.add_normal(xb.xform(norms[vi]))
+		st.add_vertex(xb.xform(verts[vi]) + pos)
+
+func _bxm(parent: Spatial, pos: Vector3, size: Vector3, hex: String, rot: Vector3 = Vector3.ZERO) -> void:
+	_mi(parent, _bm(size), pos, hex, rot)
+
+func _flush_builders(range_m: float) -> void:
+	for key in builders.keys():
+		var entry: Array = builders[key]
+		var st: SurfaceTool = entry[0]
+		var parent: Spatial = entry[1]
+		var mi := MeshInstance.new()
+		mi.mesh = st.commit()
+		mi.cast_shadow = GeometryInstance.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(mi)
+		quality_meshes.append([mi, range_m])
+	builders.clear()
 
 # Builds a stylised person. o = outfit dictionary. Returns root; limbs stored in meta for walking animation.
 func _human(parent: Spatial, child_size: bool, o: Dictionary) -> Spatial:
@@ -1061,16 +1129,16 @@ func _human(parent: Spatial, child_size: bool, o: Dictionary) -> Spatial:
 		arms.append(pv)
 	# head
 	var head := SphereMesh.new()
-	head.radius = 0.245 if o.has("hero") else 0.19
-	head.height = 0.48 if o.has("hero") else 0.38
-	head.radial_segments = 16
+	head.radius = 0.19
+	head.height = 0.38
+	head.radial_segments = 14
 	head.rings = 8
-	_mi(root, head, Vector3(0, 1.78, 0), skin)
+	_mi(root, head, Vector3(0, 1.74, 0), skin)
 	_bxm(root, Vector3(0, 1.58, 0), Vector3(0.10, 0.10, 0.10), skin)
 	_bxm(root, Vector3(0, 1.72, -0.19), Vector3(0.05, 0.08, 0.06), "9d6b49")
-	for ex in [-0.085, 0.085]:
-		_bxm(root, Vector3(ex, 1.81, -0.215 if o.has("hero") else -0.175), Vector3(0.045, 0.03, 0.02), "151515")
-	for ex2 in ([-0.235, 0.235] if o.has("hero") else [-0.19, 0.19]):
+	for ex in [-0.07, 0.07]:
+		_bxm(root, Vector3(ex, 1.78, -0.175), Vector3(0.045, 0.03, 0.02), "151515")
+	for ex2 in [-0.19, 0.19]:
 		_bxm(root, Vector3(ex2, 1.74, 0), Vector3(0.03, 0.09, 0.06), skin)
 	var hair_hex := "1b1410"
 	var head_style: int = int(o["head"])
@@ -1109,8 +1177,8 @@ func _human(parent: Spatial, child_size: bool, o: Dictionary) -> Spatial:
 			_bxm(root, Vector3(0, 1.84, -0.22), Vector3(0.26, 0.03, 0.14), "1b1b1b")
 	else:
 		var hair := SphereMesh.new()
-		hair.radius = 0.25 if o.has("hero") else 0.20
-		hair.height = 0.23 if o.has("hero") else 0.2
+		hair.radius = 0.20
+		hair.height = 0.2
 		hair.radial_segments = 10
 		hair.rings = 4
 		_mi(root, hair, Vector3(0, 1.88, 0.01), hair_hex)
@@ -1118,6 +1186,7 @@ func _human(parent: Spatial, child_size: bool, o: Dictionary) -> Spatial:
 		_bxm(root, Vector3(0, 1.78, -0.2), Vector3(0.36, 0.06, 0.03), "0a0a0a")
 	root.set_meta("legs", legs)
 	root.set_meta("arms", arms)
+	_flush_builders(110.0)
 	return root
 
 func _animate_walker(vis: Spatial, clock: float, moving: bool) -> void:
@@ -1176,7 +1245,7 @@ func _create_npcs() -> void:
 			npc_roads.append(sg)
 	if npc_roads.empty():
 		return
-	var n_npc := 14
+	var n_npc := 30
 	for i in range(n_npc):
 		var si := rng.randi_range(0, npc_roads.size() - 1)
 		var seg: Array = npc_roads[si]
@@ -1189,7 +1258,7 @@ func _create_npcs() -> void:
 		npc_t.append(t)
 		npc_dir.append(1.0 if rng.randf() < 0.5 else -1.0)
 		npc_side.append(side)
-		npc_speed.append(rng.randf_range(0.9, 1.5))
+		npc_speed.append(rng.randf_range(1.2, 2.0))
 		npc_clock.append(rng.randf() * 6.0)
 		if i % 3 == 0 and people_stream != null:
 			var voice := AudioStreamPlayer3D.new()
@@ -1254,10 +1323,14 @@ func _update_npcs(delta: float) -> void:
 				if off.length() < 4.5 and off.dot(v.normalized()) > 0.0 and abs(float(car_vel[ci])) > 1.0:
 					moving = false
 			if moving:
-				npc.move_and_slide(Vector3(v.x, -2.0, v.z), Vector3.UP)
+				if npc.translation.distance_squared_to(player.translation) < 40000.0:
+					npc.move_and_slide(Vector3(v.x, -2.0, v.z), Vector3.UP)
+				else:
+					npc.translation += Vector3(v.x, 0.0, v.z) * delta
 				npc.rotation.y = lerp_angle(npc.rotation.y, atan2(-v.x, -v.z), delta * 6.0)
 				npc_clock[i] = float(npc_clock[i]) + delta * 7.0 * float(npc_speed[i])
-		_animate_walker(npc.get_meta("visual"), float(npc_clock[i]), moving)
+		if npc.translation.distance_squared_to(camera.translation) < 6400.0:
+			_animate_walker(npc.get_meta("visual"), float(npc_clock[i]), moving)
 
 # ---------------------------------------------------------------- vehicles
 # kind: 0 sedan, 1 SUV, 2 pickup, 3 van, 4 bus, 5 truck, 6 hatchback, 7 taxi, 8 police
@@ -1274,8 +1347,7 @@ func _emblem(parent: Spatial, kind: int, pos: Vector3, face_z: float) -> void:
 				oval.top_radius = 0.035
 				oval.bottom_radius = 0.035
 				oval.height = 0.02
-				var m := _mi(parent, oval, pos + Vector3(dx, 0, 0), chrome)
-				m.rotation.x = PI * 0.5
+				_mi(parent, oval, pos + Vector3(dx, 0, 0), chrome, Vector3(PI * 0.5, 0, 0))
 		1:
 			_bxm(parent, pos, Vector3(0.14, 0.09, 0.02), chrome)
 		2:
@@ -1291,16 +1363,14 @@ func _emblem(parent: Spatial, kind: int, pos: Vector3, face_z: float) -> void:
 			ring.height = 0.02
 			ring.radial_segments = 12
 			ring.rings = 1
-			var rm := _mi(parent, ring, pos, chrome)
-			rm.rotation.x = PI * 0.5
+			_mi(parent, ring, pos, chrome, Vector3(PI * 0.5, 0, 0))
 			_bxm(parent, pos, Vector3(0.2, 0.03, 0.02), chrome)
 		5:
 			_bxm(parent, pos, Vector3(0.2, 0.1, 0.02), "123a7a")
 		6:
 			_bxm(parent, pos, Vector3(0.16, 0.06, 0.02), "c0392b")
 		7:
-			var bt := _bxm(parent, pos, Vector3(0.2, 0.06, 0.02), "d4a53a")
-			bt.rotation.z = 0.0
+			_bxm(parent, pos, Vector3(0.2, 0.06, 0.02), "d4a53a")
 		8:
 			var star := CylinderMesh.new()
 			star.top_radius = 0.075
@@ -1308,8 +1378,7 @@ func _emblem(parent: Spatial, kind: int, pos: Vector3, face_z: float) -> void:
 			star.height = 0.02
 			star.radial_segments = 12
 			star.rings = 1
-			var sm := _mi(parent, star, pos, chrome)
-			sm.rotation.x = PI * 0.5
+			_mi(parent, star, pos, chrome, Vector3(PI * 0.5, 0, 0))
 		_:
 			_bxm(parent, pos, Vector3(0.14, 0.14, 0.02), "b71c1c")
 
@@ -1378,15 +1447,13 @@ func _vehicle_model(parent: Spatial, color_hex: String, kind: int, make_idx: int
 			wheel.bottom_radius = wheel_r
 			wheel.height = 0.24
 			wheel.radial_segments = 12
-			var wn := _mi(parent, wheel, Vector3(x, wheel_r, z), "0d0e10")
-			wn.rotation.z = PI * 0.5
+			_mi(parent, wheel, Vector3(x, wheel_r, z), "0d0e10", Vector3(0, 0, PI * 0.5))
 			var rim := CylinderMesh.new()
 			rim.top_radius = wheel_r * 0.58
 			rim.bottom_radius = wheel_r * 0.58
 			rim.height = 0.26
 			rim.radial_segments = 10
-			var rn := _mi(parent, rim, Vector3(x * 1.005, wheel_r, z), "b7bcc0")
-			rn.rotation.z = PI * 0.5
+			_mi(parent, rim, Vector3(x * 1.005, wheel_r, z), "b7bcc0", Vector3(0, 0, PI * 0.5))
 	# make badge + name
 	var make: Array = MAKES[make_idx % MAKES.size()]
 	if kind < 4 or kind == 6 or kind >= 7:
@@ -1418,12 +1485,13 @@ func _make_vehicle(pos: Vector3, heading: float, color_hex: String, kind: int, m
 	var vsize := _vehicle_size(kind)
 	var cs := CollisionShape.new()
 	var bs := BoxShape.new()
-	bs.extents = vsize * 0.5
+	bs.size = vsize
 	cs.shape = bs
 	cs.translation.y = vsize.y * 0.5 + 0.1
 	v.add_child(cs)
 	# the model is built with materials from the cache; "flash" boxes use the police light materials
 	_vehicle_model(v, color_hex, kind, make_idx)
+	_flush_builders(230.0)
 	return v
 
 func _create_car() -> void:
@@ -1477,7 +1545,7 @@ func _create_traffic() -> void:
 	if routes.empty():
 		return
 	var kinds := [0, 1, 0, 6, 2, 1, 3, 0, 7, 8, 1, 4, 0, 5, 6, 7, 1, 0, 8, 2, 0, 3, 1, 6, 0, 4]
-	for i in range(min(kinds.size(), 14)):
+	for i in range(min(kinds.size(), 12)):
 		var route: Array = routes[rng.randi_range(0, routes.size() - 1)]
 		var seg := rng.randi_range(0, route.size() - 2)
 		for tries in range(12):
@@ -1508,7 +1576,7 @@ func _create_traffic() -> void:
 		all_cars.append(v)
 		traffic_routes.append(route)
 		traffic_idx.append(seg)
-		traffic_speeds.append(rng.randf_range(5.5, 9.0) if kind != 4 else 5.0)
+		traffic_speeds.append(rng.randf_range(8.0, 14.0) if kind != 4 else 7.0)
 		traffic_wait.append(0.0)
 		traffic_stuck.append(0.0)
 		last_pos.append(v.translation)
@@ -1574,7 +1642,10 @@ func _advance_traffic(delta: float) -> void:
 			traffic_wait[i] = 0.0
 		var want := 0.0 if blocked else float(traffic_speeds[i])
 		car_vel[i] = want
-		v.move_and_slide(Vector3(forward.x * want, -2.0, forward.z * want), Vector3.UP)
+		if v.translation.distance_squared_to(player.translation) > 122500.0:
+			v.translation += Vector3(forward.x * want, 0.0, forward.z * want) * delta
+		else:
+			v.move_and_slide(Vector3(forward.x * want, -2.0, forward.z * want), Vector3.UP)
 		var moved: float = (v.translation - (last_pos[i] as Vector3)).length()
 		last_pos[i] = v.translation
 		if want > 1.0 and moved < 0.6 * delta:
@@ -1659,7 +1730,7 @@ func _add_engine_sound(v: Spatial) -> void:
 
 # ---------------------------------------------------------------- light pools
 func _create_lamp_pool() -> void:
-	for i in range(6):
+	for i in range(3):
 		var l := OmniLight.new()
 		l.omni_range = 16.0
 		l.light_color = Color(1.0, 0.86, 0.55)
@@ -1695,6 +1766,7 @@ func _update_lamp_pool(focus: Vector3, night_factor: float) -> void:
 	if night_factor < 0.05:
 		for l in lamp_pool:
 			(l as OmniLight).light_energy = 0.0
+			(l as OmniLight).visible = false
 		return
 	var best := []
 	for lp in lamp_positions:
@@ -1713,8 +1785,10 @@ func _update_lamp_pool(focus: Vector3, night_factor: float) -> void:
 		if i < best.size():
 			l.global_transform = Transform(Basis(), best[i][1])
 			l.light_energy = 2.2 * night_factor
+			l.visible = true
 		else:
 			l.light_energy = 0.0
+			l.visible = false
 
 # ---------------------------------------------------------------- UI
 func _mk_label(text: String, sz: int, col: Color) -> Label:
@@ -1840,6 +1914,9 @@ func _create_ui() -> void:
 	sound_status = _mk_label("", 11, Color(1, 1, 1))
 	sound_status.rect_position = Vector2(560, 8)
 	ui_root.add_child(sound_status)
+	fps_label = _mk_label("", 12, Color(0.6, 1, 0.6))
+	fps_label.rect_position = Vector2(560, 34)
+	ui_root.add_child(fps_label)
 	_create_wardrobe_ui()
 	_create_lamp_pool()
 	# floating names (a pool of labels placed over the nearest named places)
@@ -1970,16 +2047,15 @@ func _resize_ui() -> void:
 
 # ---------------------------------------------------------------- input
 func _active_joy() -> int:
-	if joystick_device >= 0:
-		return joystick_device
+	if joy_device >= 0:
+		return joy_device
 	var devices := Input.get_connected_joypads()
 	return int(devices[0]) if devices.size() > 0 else 0
 
 func _joy_value(axis: int) -> float:
-	var device := _active_joy()
-	var live := Input.get_joy_axis(device, axis)
-	var saved: float = float(joystick_axes.get(axis, 0.0))
-	return saved if abs(saved) > abs(live) else live
+	var value := Input.get_joy_axis(_active_joy(), axis)
+	var saved: float = float(joy_axes.get(axis, 0.0))
+	return saved if abs(saved) > abs(value) else value
 
 func _axis(negative: int, positive: int, joy_axis: int) -> float:
 	var value := _joy_value(joy_axis)
@@ -1989,10 +2065,10 @@ func _axis(negative: int, positive: int, joy_axis: int) -> float:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadMotion:
-		joystick_device = event.device
-		joystick_axes[event.axis] = event.axis_value
+		joy_device = event.device
+		joy_axes[event.axis] = event.axis_value
 	if event is InputEventJoypadButton:
-		joystick_device = event.device
+		joy_device = event.device
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED and not wardrobe_open:
 		yaw -= event.relative.x * 0.003
 		pitch = clamp(pitch - event.relative.y * 0.002, -0.75, 0.45)
@@ -2073,6 +2149,11 @@ func _update_time(delta: float) -> void:
 	time_of_day = fposmod(time_of_day + delta * 0.035, 24.0)
 	if time_of_day > prev:
 		_check_prayer_times(prev, time_of_day)
+	env_acc += delta
+	if env_acc < 0.2:
+		return
+	var dt := env_acc
+	env_acc = 0.0
 	var a := (time_of_day - 6.0) / 24.0 * TAU
 	var sun_dir := Vector3(cos(a), sin(a), 0.35).normalized()
 	var moon_dir := Vector3(-sun_dir.x, -sun_dir.y, sun_dir.z).normalized()
@@ -2099,18 +2180,19 @@ func _update_time(delta: float) -> void:
 	cloud_mat.albedo_color = Color(0.25 + 0.75 * daylight, 0.27 + 0.73 * daylight, 0.35 + 0.65 * daylight, 0.9)
 	for cloud in cloud_nodes:
 		var c: Spatial = cloud
-		c.translation.x += delta * 3.0
+		c.translation.x += dt * 3.0
 		if c.translation.x > world_max.x + 600.0:
 			c.translation.x = world_min.x - 600.0
 	for s in headlight_pair:
 		(s as SpotLight).light_energy = (3.0 * night_factor) if driving else 0.0
-	flash_clock += delta
+		(s as SpotLight).visible = driving and night_factor > 0.05
+	flash_clock += dt
 	var phase := int(flash_clock * 4.0) % 2 == 0
 	if police_flash_mats.size() >= 2:
 		var boost := 1.5 + 3.5 * night_factor
 		(police_flash_mats[0] as SpatialMaterial).emission_energy = boost if phase else 0.2
 		(police_flash_mats[1] as SpatialMaterial).emission_energy = 0.2 if phase else boost
-	lamp_timer -= delta
+	lamp_timer -= dt
 	if lamp_timer <= 0.0:
 		lamp_timer = 0.4
 		var focus := car.translation if driving else player.translation
@@ -2123,19 +2205,20 @@ func _update_time(delta: float) -> void:
 # ---------------------------------------------------------------- main loop
 func _physics_process(delta: float) -> void:
 	frame_count += 1
-	render_cull_clock += delta
-	if render_cull_clock >= 0.4:
-		render_cull_clock = 0.0
-		_cull_render_chunks()
-		_stream_building_collisions()
 	if selftest and frame_count > 240:
 		get_tree().quit()
 	environment_update_clock += delta
-	if environment_update_clock >= 0.10:
+	if environment_update_clock >= 0.1:
 		_update_time(environment_update_clock)
 		environment_update_clock = 0.0
-	# move_and_slide uses the engine physics timestep, so cars and pedestrians
-	# must be advanced on every physics tick (10 Hz made them ~6x slower).
+	collision_update_clock += delta
+	if collision_update_clock >= 0.35:
+		collision_update_clock = 0.0
+		_stream_collisions()
+	quality_clock += delta
+	if quality_clock >= 0.5:
+		quality_clock = 0.0
+		_apply_quality()
 	_advance_traffic(delta)
 	_update_npcs(delta)
 	_update_pilgrims(delta)
@@ -2146,11 +2229,8 @@ func _physics_process(delta: float) -> void:
 		return
 	var lx := _axis(KEY_A, KEY_D, 0)
 	var ly := _axis(KEY_W, KEY_S, 1)
-	# Android TV remotes and many controllers send D-pad as buttons rather than axes.
-	lx += float(Input.is_joy_button_pressed(_active_joy(), 15)) - float(Input.is_joy_button_pressed(_active_joy(), 14))
-	ly += float(Input.is_joy_button_pressed(_active_joy(), 13)) - float(Input.is_joy_button_pressed(_active_joy(), 12))
-	lx = clamp(lx, -1.0, 1.0)
-	ly = clamp(ly, -1.0, 1.0)
+	lx = clamp(lx + float(Input.is_joy_button_pressed(_active_joy(), 15)) - float(Input.is_joy_button_pressed(_active_joy(), 14)), -1.0, 1.0)
+	ly = clamp(ly + float(Input.is_joy_button_pressed(_active_joy(), 13)) - float(Input.is_joy_button_pressed(_active_joy(), 12)), -1.0, 1.0)
 	var arrows_turn := float(Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_LEFT))
 	var arrows_move := float(Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_UP))
 	ly = clamp(ly + arrows_move, -1.0, 1.0)
@@ -2166,13 +2246,13 @@ func _physics_process(delta: float) -> void:
 		var brake_key: float = clamp(float(Input.is_key_pressed(KEY_S)) + float(Input.is_key_pressed(KEY_DOWN)), 0.0, 1.0)
 		var gas: float = clamp(max(max(0.0, _joy_value(7)), max(gas_key, max(0.0, -ly))), 0.0, 1.0)
 		var brake: float = clamp(max(max(0.0, _joy_value(6)), max(brake_key, max(0.0, ly))), 0.0, 1.0)
-		var top_speed := 32.0
+		var top_speed := 48.0
 		if int(car_kinds[active_car_index]) == 4:
-			top_speed = 20.0
+			top_speed = 26.0
 		var target_speed := gas * top_speed - brake * 7.0
-		var accel := 17.0 if gas > 0.1 else (13.0 if brake > 0.1 else 8.0)
+		var accel := 26.0 if gas > 0.1 else (18.0 if brake > 0.1 else 9.0)
 		speed = move_toward(speed, target_speed, accel * delta)
-		var steer_strength: float = lerp(1.9, 0.75, clamp(abs(speed) / 32.0, 0.0, 1.0))
+		var steer_strength: float = lerp(1.9, 0.7, clamp(abs(speed) / 48.0, 0.0, 1.0))
 		if abs(speed) > 0.5:
 			car_heading -= steer_in * delta * steer_strength * sign(speed)
 		car.rotation.y = car_heading
@@ -2184,7 +2264,7 @@ func _physics_process(delta: float) -> void:
 				speed *= 0.35
 				break
 		var snd: AudioStreamPlayer3D = car_sounds[active_car_index]
-		snd.pitch_scale = 0.75 + abs(speed) / 32.0 * 1.3
+		snd.pitch_scale = 0.75 + abs(speed) / 48.0 * 1.3
 		if abs(speed) > 0.4 and not snd.playing:
 			snd.play()
 		if abs(speed) < 0.4 and snd.playing:
@@ -2195,7 +2275,7 @@ func _physics_process(delta: float) -> void:
 		var forward := Vector3(-sin(yaw), 0, -cos(yaw))
 		var right := Vector3(cos(yaw), 0, -sin(yaw))
 		var move := (right * lx - forward * ly).limit_length(1.0)
-		var walk_speed := 7.0 if Input.is_key_pressed(KEY_SHIFT) else 4.2
+		var walk_speed := 12.0 if Input.is_key_pressed(KEY_SHIFT) else 6.0
 		player.move_and_slide(Vector3(move.x * walk_speed, -2.0, move.z * walk_speed), Vector3.UP)
 		var moving := move.length() > 0.1
 		if moving:
@@ -2209,10 +2289,7 @@ func _physics_process(delta: float) -> void:
 					step_audio.play()
 		_animate_walker(player_visual, walk_clock, moving)
 	_update_camera()
-	hud_update_clock += delta
-	if hud_update_clock >= 0.12:
-		_update_hud(hud_update_clock)
-		hud_update_clock = 0.0
+	_update_hud(delta)
 	_update_labels(delta)
 
 func _update_camera() -> void:
@@ -2234,8 +2311,8 @@ func _update_camera() -> void:
 	_place_sky()
 
 func _place_sky() -> void:
-	var sd: Vector3 = get_meta("sun_dir", Vector3(0.0, 1.0, 0.0))
-	var md: Vector3 = get_meta("moon_dir", Vector3(0.0, -1.0, 0.0))
+	var sd: Vector3 = get_meta("sun_dir")
+	var md: Vector3 = get_meta("moon_dir")
 	sun_mesh.translation = camera.translation + sd * 3500.0
 	moon_mesh.translation = camera.translation + md * 3500.0
 
