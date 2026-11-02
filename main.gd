@@ -90,6 +90,11 @@ var player_vel := Vector3.ZERO
 # batching / materials
 var render_chunks := []
 var render_cull_clock := 0.0
+var building_collision_cells := {}
+var active_collision_cells := {}
+var collision_clock := 0.0
+const COLLISION_CELL := 250.0
+const COLLISION_RADIUS := 420.0
 var hud_update_clock := 0.0
 var environment_update_clock := 0.0
 var joystick_axes := {}
@@ -140,6 +145,7 @@ func _ready() -> void:
 	add_child(camera)
 	_flush_batches()
 	_cull_render_chunks()
+	_stream_building_collisions()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _notification(what: int) -> void:
@@ -724,12 +730,36 @@ func _city_building(b: Dictionary) -> void:
 	var en: String = b["n"]
 	var open_mosque := area > 60000.0 or "Great Mosque" in en or "Grand Mosque" in en
 	if not open_mosque and mh < 3.0 and h - mh > 2.0 and area > 6.0:
-		_building_collision(verts, rs, mh, h, area > 2500.0)
+		# Stream collision geometry near the player instead of creating
+		# thousands of active physics bodies across the entire city.
+		var cell := Vector2(int(floor(cen.x / COLLISION_CELL)), int(floor(cen.y / COLLISION_CELL)))
+		if not building_collision_cells.has(cell):
+			building_collision_cells[cell] = []
+		building_collision_cells[cell].append([verts, rs, mh, h, area > 2500.0])
 	if en != "":
 		var col := Color(1.0, 0.86, 0.5) if kind == "hotel" else Color(1, 1, 1)
 		label_items.append([Vector3(cen.x, h + 6.0, cen.y), en, col, 260.0 if h < 100.0 else 900.0])
 
-func _building_collision(verts: Array, rs: Array, mh: float, h: float, big: bool) -> void:
+func _stream_building_collisions() -> void:
+	var pos: Vector3 = car.translation if driving else player.translation
+	var at := Vector2(pos.x, pos.z)
+	for cell in building_collision_cells.keys():
+		var center := (cell as Vector2) * COLLISION_CELL + Vector2(COLLISION_CELL * 0.5, COLLISION_CELL * 0.5)
+		var nearby := center.distance_squared_to(at) < (COLLISION_RADIUS * COLLISION_RADIUS)
+		if not nearby and active_collision_cells.has(cell):
+			for body in active_collision_cells[cell]:
+				(body as StaticBody).collision_layer = 0
+			active_collision_cells.erase(cell)
+		elif nearby and not active_collision_cells.has(cell):
+			var bodies := []
+			for item in building_collision_cells[cell]:
+				var body: StaticBody = _building_collision(item[0], item[1], item[2], item[3], item[4])
+				if body != null:
+					bodies.append(body)
+			active_collision_cells[cell] = bodies
+			building_collision_cells.erase(cell)
+
+func _building_collision(verts: Array, rs: Array, mh: float, h: float, big: bool) -> StaticBody:
 	var body := StaticBody.new()
 	var outer_n := int(rs[0])
 	if rs.size() == 1 and outer_n <= 24 and not big:
@@ -742,7 +772,7 @@ func _building_collision(verts: Array, rs: Array, mh: float, h: float, big: bool
 			pts.append(Vector3(hp.x, mh, hp.y))
 			pts.append(Vector3(hp.x, h, hp.y))
 		if pts.size() < 6:
-			return
+			return null
 		var cs := CollisionShape.new()
 		var shape := ConvexPolygonShape.new()
 		shape.points = pts
@@ -769,6 +799,7 @@ func _building_collision(verts: Array, rs: Array, mh: float, h: float, big: bool
 				count += 1
 			off += cnt
 	add_child(body)
+	return body
 
 func _city_poi(p: Array) -> void:
 	var en := str(p[2])
@@ -2084,6 +2115,7 @@ func _physics_process(delta: float) -> void:
 	if render_cull_clock >= 0.4:
 		render_cull_clock = 0.0
 		_cull_render_chunks()
+		_stream_building_collisions()
 	if selftest and frame_count > 240:
 		get_tree().quit()
 	environment_update_clock += delta
