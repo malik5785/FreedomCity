@@ -2190,8 +2190,8 @@ func _update_camera() -> void:
 	_place_sky()
 
 func _place_sky() -> void:
-	var sd: Vector3 = get_meta("sun_dir")
-	var md: Vector3 = get_meta("moon_dir")
+	var sd: Vector3 = get_meta("sun_dir", Vector3(0.0, 1.0, 0.0))
+	var md: Vector3 = get_meta("moon_dir", Vector3(0.0, -1.0, 0.0))
 	sun_mesh.translation = camera.translation + sd * 3500.0
 	moon_mesh.translation = camera.translation + md * 3500.0
 
