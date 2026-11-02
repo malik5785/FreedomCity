@@ -1485,7 +1485,7 @@ func _make_vehicle(pos: Vector3, heading: float, color_hex: String, kind: int, m
 	var vsize := _vehicle_size(kind)
 	var cs := CollisionShape.new()
 	var bs := BoxShape.new()
-	bs.size = vsize
+	bs.extents = vsize * 0.5
 	cs.shape = bs
 	cs.translation.y = vsize.y * 0.5 + 0.1
 	v.add_child(cs)
@@ -2311,8 +2311,8 @@ func _update_camera() -> void:
 	_place_sky()
 
 func _place_sky() -> void:
-	var sd: Vector3 = get_meta("sun_dir")
-	var md: Vector3 = get_meta("moon_dir")
+	var sd: Vector3 = get_meta("sun_dir", Vector3(0, 1, 0))
+	var md: Vector3 = get_meta("moon_dir", Vector3(0, -1, 0))
 	sun_mesh.translation = camera.translation + sd * 3500.0
 	moon_mesh.translation = camera.translation + md * 3500.0
 
