@@ -20,3 +20,7 @@ quality/driver/driver_name="GLES2"
 vram_compression/import_etc=true
 vram_compression/import_etc2=true
 quality/filters/msaa=0
+
+[physics]
+
+common/physics_fps=40
