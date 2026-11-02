@@ -10,3 +10,13 @@ Changed for GLES2 / Godot 3:
 Kept: real OpenStreetMap roads/buildings/heights/names, Kaaba + Clock Tower, day/night, lamps,
 traffic, police lights, changing room, minimap + full map, sounds (engine, horn, steps, crowd, birds).
 NOT TESTED on a device. The build runs a 240-frame smoke test; send me any error text.
+
+V12.1 SPEED FIXES
+- Each person and each car is now ONE merged mesh (was about 40 pieces = 40 draw calls each).
+- The game draws at 1280x720 and the TV scales it up (big saving on 1080p/4K TVs).
+- Auto quality: every 2 seconds it measures FPS and shortens/lengthens the draw distance (top right
+  shows FPS and QUALITY). Starts at 60% and rises by itself if the TV is fast enough.
+- Far-away cars and people skip physics and animation. Fewer lights (3 street lights + 2 headlights,
+  only at night), fewer/smaller transparent clouds, cheaper material shading.
+- Physics at 40 ticks per second (was 60). Day/night visuals update 5 times per second.
+- Faster movement: walk 6 m/s (run 12), car top speed 48 m/s (about 170 km/h), faster traffic.
