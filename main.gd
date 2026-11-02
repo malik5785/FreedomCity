@@ -31,7 +31,7 @@ var moon_mesh: MeshInstance
 var cloud_nodes := []
 var cloud_mat: SpatialMaterial
 var player_visual: Spatial
-var outfit := {"top": 0, "bottom": 0, "shoes": 0, "head": 0, "glasses": 0}
+var outfit := {"top": 0, "bottom": 0, "shoes": 0, "head": 0, "glasses": 0, "hero": true}
 var wardrobe_open := false
 var wardrobe_panel: Control
 var wardrobe_row := 0
@@ -1061,16 +1061,16 @@ func _human(parent: Spatial, child_size: bool, o: Dictionary) -> Spatial:
 		arms.append(pv)
 	# head
 	var head := SphereMesh.new()
-	head.radius = 0.19
-	head.height = 0.38
-	head.radial_segments = 14
+	head.radius = 0.245 if o.has("hero") else 0.19
+	head.height = 0.48 if o.has("hero") else 0.38
+	head.radial_segments = 16
 	head.rings = 8
-	_mi(root, head, Vector3(0, 1.74, 0), skin)
+	_mi(root, head, Vector3(0, 1.78, 0), skin)
 	_bxm(root, Vector3(0, 1.58, 0), Vector3(0.10, 0.10, 0.10), skin)
 	_bxm(root, Vector3(0, 1.72, -0.19), Vector3(0.05, 0.08, 0.06), "9d6b49")
-	for ex in [-0.07, 0.07]:
-		_bxm(root, Vector3(ex, 1.78, -0.175), Vector3(0.045, 0.03, 0.02), "151515")
-	for ex2 in [-0.19, 0.19]:
+	for ex in [-0.085, 0.085]:
+		_bxm(root, Vector3(ex, 1.81, -0.215 if o.has("hero") else -0.175), Vector3(0.045, 0.03, 0.02), "151515")
+	for ex2 in ([-0.235, 0.235] if o.has("hero") else [-0.19, 0.19]):
 		_bxm(root, Vector3(ex2, 1.74, 0), Vector3(0.03, 0.09, 0.06), skin)
 	var hair_hex := "1b1410"
 	var head_style: int = int(o["head"])
@@ -1109,8 +1109,8 @@ func _human(parent: Spatial, child_size: bool, o: Dictionary) -> Spatial:
 			_bxm(root, Vector3(0, 1.84, -0.22), Vector3(0.26, 0.03, 0.14), "1b1b1b")
 	else:
 		var hair := SphereMesh.new()
-		hair.radius = 0.20
-		hair.height = 0.2
+		hair.radius = 0.25 if o.has("hero") else 0.20
+		hair.height = 0.23 if o.has("hero") else 0.2
 		hair.radial_segments = 10
 		hair.rings = 4
 		_mi(root, hair, Vector3(0, 1.88, 0.01), hair_hex)
