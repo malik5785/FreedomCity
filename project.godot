@@ -9,6 +9,5 @@ window/size/height=720
 quality/driver/driver_name="GLES2"
 quality/driver/fallback_to_gles2=true
 
-[rendering]
 vram_compression/import_etc=true
 vram_compression/import_etc2=true
