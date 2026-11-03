@@ -1,0 +1,40 @@
+name: Build Eyad Rammah Razzam APK
+on:
+  push:
+    branches: [eyad-rammah-razzam-new]
+  workflow_dispatch:
+jobs:
+  android:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK packages
+        run: |
+          echo "ANDROID_SDK_ROOT=${ANDROID_HOME}" >> "$GITHUB_ENV"
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-33" "build-tools;33.0.2" "platform-tools"
+      - name: Download Godot 3.6.2 and Android templates
+        run: |
+          set -eux
+          curl -fL --retry 3 -o godot.zip https://github.com/godotengine/godot/releases/download/3.6.2-stable/Godot_v3.6.2-stable_linux_headless.64.zip
+          unzip -q godot.zip
+          chmod +x Godot_v3.6.2-stable_linux_headless.64
+          curl -fL --retry 3 -o templates.tpz https://github.com/godotengine/godot/releases/download/3.6.2-stable/Godot_v3.6.2-stable_export_templates.tpz
+          mkdir -p "$HOME/.local/share/godot/templates/3.6.2.stable"
+          unzip -q templates.tpz -d /tmp/eyad-templates
+          cp /tmp/eyad-templates/templates/* "$HOME/.local/share/godot/templates/3.6.2.stable/"
+      - name: Export APK
+        run: |
+          set -eux
+          mkdir -p build
+          ./Godot_v3.6.2-stable_linux_headless.64 --path . --editor --quit
+          ./Godot_v3.6.2-stable_linux_headless.64 --path . --export-debug Android build/Eyad_Rammah_Razzam.apk
+          test -s build/Eyad_Rammah_Razzam.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Eyad-Rammah-Razzam-APK
+          path: build/Eyad_Rammah_Razzam.apk
