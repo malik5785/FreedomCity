@@ -197,6 +197,7 @@ func _make_traffic():
 		var lane=rng.randi_range(-WORLD+1,WORLD-1)*BLOCK
 		var p=Vector3(rng.randf_range(-360,360),0,lane+(-7 if i%2==0 else 7))
 		if axis==1: p=Vector3(lane+7,0,rng.randf_range(-600,600))
+		if i==0: p=Vector3(5,0,4)
 		root.translation=p
 		var car_colors=[Color("#f1f0e9"),Color("#222d3c"),Color("#a6b4b7"),Color("#8a3b35"),Color("#c7c3b6"),Color("#1d6583"),Color("#d5ad60"),Color("#3b3d3c"),Color("#7d8a70"),Color("#e8e5df")]
 		var typ=i%9
@@ -246,22 +247,28 @@ func _physics_process(delta):
 	frame+=1
 	if selftest and frame>240: get_tree().quit()
 	var input=Vector2(_axis(KEY_A,KEY_D,0),_axis(KEY_W,KEY_S,1))
-	input.x+=float(Input.is_key_pressed(KEY_RIGHT))-float(Input.is_key_pressed(KEY_LEFT))
-	input.y+=float(Input.is_key_pressed(KEY_DOWN))-float(Input.is_key_pressed(KEY_UP))
-	input.x+=float(Input.is_joy_button_pressed(0,15))-float(Input.is_joy_button_pressed(0,14))
-	input.y+=float(Input.is_joy_button_pressed(0,13))-float(Input.is_joy_button_pressed(0,12))
+	var remote_turn=float(Input.is_key_pressed(KEY_RIGHT))-float(Input.is_key_pressed(KEY_LEFT))
+	var remote_forward=float(Input.is_key_pressed(KEY_DOWN))-float(Input.is_key_pressed(KEY_UP))
+	if abs(remote_forward)>0.01 or abs(remote_turn)>0.01:
+		yaw+=remote_turn*delta*2.4
+		input=Vector2(sin(yaw)*remote_forward,cos(yaw)*remote_forward)
+	var dpad_turn=float(Input.is_joy_button_pressed(0,15))-float(Input.is_joy_button_pressed(0,14))
+	var dpad_forward=float(Input.is_joy_button_pressed(0,13))-float(Input.is_joy_button_pressed(0,12))
+	if abs(dpad_forward)>0.01 or abs(dpad_turn)>0.01:
+		yaw+=dpad_turn*delta*2.4
+		input=Vector2(sin(yaw)*dpad_forward,cos(yaw)*dpad_forward)
 	input=input.clamped(1)
 	if input.length_squared()>0.01:
 		var direction=Vector3(input.x,0,input.y).normalized()
-		yaw=atan2(direction.x,direction.z)
+		if abs(remote_forward)<0.01 and abs(dpad_forward)<0.01: yaw=atan2(direction.x,direction.z)
 		var next=avatar.translation+direction*(DRIVE if driving else WALK)*delta
 		if abs(next.x)<410 and abs(next.z)<410 and not _hits_building(next) and not _hits_obstacle(next):
+			player_speed=next.distance_to(avatar.translation)/max(delta,0.001)
 			avatar.translation=next
 			vehicle.translation=next
 			if driving and active_car>=0:
 				traffic[active_car][0].translation=next
 				traffic[active_car][0].rotation.y=yaw
-			player_speed=next.distance_to(avatar.translation)/max(delta,0.001)
 	else:
 		player_speed=0.0
 	var swing=sin(frame*0.23)*0.42 if input.length_squared()>0.01 else 0.0
