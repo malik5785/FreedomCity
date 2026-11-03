@@ -21,6 +21,20 @@ var rng = RandomNumberGenerator.new()
 var ui: Label
 var last_toggle = false
 var blocks = []
+var collision_boxes = []
+var arm_left: Spatial
+var arm_right: Spatial
+var leg_left: Spatial
+var leg_right: Spatial
+var clock_time = 9.0
+var wardrobe = false
+var map_visible = false
+var day_light: DirectionalLight
+var world_env: WorldEnvironment
+var clothes_index = 0
+var display_map: Label
+var info: Label
+var road_names = ["العزيزية  Al Aziziyah", "العـدل  Al Adl", "المسفلة  Al Misfalah", "الشوقية  Al Shawqiyah"]
 func _ready():
 	rng.seed = 20261103
 	selftest = "--selftest" in OS.get_cmdline_args()
@@ -28,6 +42,7 @@ func _ready():
 	_make_city()
 	_make_player()
 	_make_traffic()
+	_make_landmarks()
 	_make_ui()
 	set_physics_process(true)
 func _mat(c):
@@ -53,11 +68,13 @@ func _setup_world():
 	e.ambient_light_energy = 0.9
 	env.environment = e
 	add_child(env)
+	world_env=env
 	var light = DirectionalLight.new()
 	light.rotation_degrees = Vector3(-55,-35,0)
 	light.light_energy = 0.65
 	light.shadow_enabled = false
 	add_child(light)
+	day_light=light
 	var ground = _cube(self,Vector3(0,-0.5,0),Vector3(1100,1,1100),Color("#cbb68c"))
 	ground.name="Sand"
 func _make_city():
@@ -80,6 +97,10 @@ func _make_city():
 			h = rng.randf_range(15,29)
 			houses.append(Transform(Basis().scaled(Vector3(32,h,30)),pos+Vector3(24,h*0.5,23)))
 			blocks.append([Vector2(cx,cz),h])
+			collision_boxes.append(Rect2(cx-44,cz-42,39,40))
+			collision_boxes.append(Rect2(cx+8,cz-42,32,37))
+			collision_boxes.append(Rect2(cx-39,cz+9,37,32))
+			collision_boxes.append(Rect2(cx+8,cz+8,34,33))
 	var road = CubeMesh.new()
 	road.size=Vector3(ROAD,0.1,1600)
 	var mm=MultiMesh.new()
@@ -128,6 +149,24 @@ func _make_player():
 	_cube(avatar,Vector3(0,3.08,0),Vector3(0.8,0.18,0.8),Color("#ffffff"))
 	_cube(avatar,Vector3(-0.3,0.28,0),Vector3(0.25,0.55,0.3),Color("#333333"))
 	_cube(avatar,Vector3(0.3,0.28,0),Vector3(0.25,0.55,0.3),Color("#333333"))
+	arm_left=Spatial.new()
+	arm_right=Spatial.new()
+	leg_left=Spatial.new()
+	leg_right=Spatial.new()
+	avatar.add_child(arm_left)
+	avatar.add_child(arm_right)
+	avatar.add_child(leg_left)
+	avatar.add_child(leg_right)
+	arm_left.translation=Vector3(-0.62,2.05,0)
+	arm_right.translation=Vector3(0.62,2.05,0)
+	leg_left.translation=Vector3(-0.22,0.75,0)
+	leg_right.translation=Vector3(0.22,0.75,0)
+	_cube(arm_left,Vector3(0,-0.5,0),Vector3(0.32,1.05,0.38),Color("#f4f2e9"))
+	_cube(arm_right,Vector3(0,-0.5,0),Vector3(0.32,1.05,0.38),Color("#f4f2e9"))
+	_cube(leg_left,Vector3(0,-0.36,0),Vector3(0.3,0.7,0.36),Color("#f4f2e9"))
+	_cube(leg_right,Vector3(0,-0.36,0),Vector3(0.3,0.7,0.36),Color("#f4f2e9"))
+	_cube(avatar,Vector3(-0.2,2.72,-0.36),Vector3(0.12,0.1,0.05),Color("#2d251d"))
+	_cube(avatar,Vector3(0.2,2.72,-0.36),Vector3(0.12,0.1,0.05),Color("#2d251d"))
 	vehicle=Spatial.new()
 	add_child(vehicle)
 	_cube(vehicle,Vector3(0,0.75,0),Vector3(2.3,0.85,4.4),Color("#f4f4ef"))
@@ -143,23 +182,23 @@ func _make_player():
 	add_child(camera)
 	_update_camera()
 func _make_traffic():
-	for i in range(5):
+	for i in range(24):
 		var root=Spatial.new()
 		add_child(root)
 		var axis=i%2
 		var lane=rng.randi_range(-WORLD+1,WORLD-1)*BLOCK
-		var p=Vector3(rng.randf_range(-600,600),0,lane+(-7 if i%2==0 else 7))
+		var p=Vector3(rng.randf_range(-360,360),0,lane+(-7 if i%2==0 else 7))
 		if axis==1: p=Vector3(lane+7,0,rng.randf_range(-600,600))
 		root.translation=p
 		_cube(root,Vector3(0,0.7,0),Vector3(2.2,1.2,4.0),Color("#5a829a") if i%3==0 else Color("#d9d6cb"))
 		_cube(root,Vector3(0,1.55,0),Vector3(1.8,0.7,2.1),Color("#8cbac4"))
 		traffic.append([root,axis,1 if i%2==0 else -1,rng.randf_range(12,23)])
-	for i in range(5):
+	for i in range(12):
 		var root=Spatial.new()
 		add_child(root)
 		_cube(root,Vector3(0,0.95,0),Vector3(0.65,1.8,0.6),Color("#f7f3e8"))
 		_cube(root,Vector3(0,2.1,0),Vector3(0.55,0.55,0.55),Color("#c8996c"))
-		root.translation=Vector3(rng.randi_range(-4,4)*BLOCK+18,0,rng.randi_range(-4,4)*BLOCK+24)
+		root.translation=Vector3(rng.randi_range(-2,2)*BLOCK+18,0,rng.randi_range(-4,4)*BLOCK+24)
 		citizens.append([root,Vector3(1 if i%2==0 else -1,0,0)])
 func _make_ui():
 	var layer=CanvasLayer.new()
@@ -169,6 +208,13 @@ func _make_ui():
 	ui.add_color_override("font_color",Color("#ffffff"))
 	layer.add_child(ui)
 	ui.text="CITY FREEDOM | MAKKAH 3D    Left stick: move    A: drive / exit"
+	info=Label.new()
+	info.rect_position=Vector2(20,42)
+	layer.add_child(info)
+	info.text="B: Clothes    Y: Map    X: Horn    Back: Resume"
+	display_map=Label.new()
+	display_map.rect_position=Vector2(20,70)
+	layer.add_child(display_map)
 func _axis(neg,pos,index):
 	var v=Input.get_joy_axis(0,index) if Input.get_connected_joypads().size()>0 else 0.0
 	if abs(v)<0.18: v=0.0
@@ -186,9 +232,14 @@ func _physics_process(delta):
 		var direction=Vector3(input.x,0,input.y).normalized()
 		yaw=atan2(direction.x,direction.z)
 		var next=avatar.translation+direction*(DRIVE if driving else WALK)*delta
-		if abs(next.x)<410 and abs(next.z)<410:
+		if abs(next.x)<410 and abs(next.z)<410 and not _hits_building(next):
 			avatar.translation=next
 			vehicle.translation=next
+	var swing=sin(frame*0.23)*0.42 if input.length_squared()>0.01 else 0.0
+	arm_left.rotation.x=swing
+	arm_right.rotation.x=-swing
+	leg_left.rotation.x=-swing
+	leg_right.rotation.x=swing
 	avatar.rotation.y=yaw
 	vehicle.rotation.y=yaw
 	for t in traffic:
@@ -206,18 +257,66 @@ func _physics_process(delta):
 		else: c[0].translation=p
 	_update_camera()
 	if frame%30==0:
+		clock_time=fmod(clock_time+0.012,24.0)
+		var daylight=clock_time>6.0 and clock_time<18.5
+		world_env.environment.background_color=Color("#8fc2dc") if daylight else Color("#1a2540")
+		day_light.light_energy=0.65 if daylight else 0.12
+		display_map.text=("MAP  " + str(avatar.translation.x).pad_decimals(0) + " / " + str(avatar.translation.z).pad_decimals(0) + "   AL ADL - MAKKAH") if map_visible else ("CLOTHES  " + str(clothes_index+1) + " / 4  [B TO CHANGE]") if wardrobe else ""
 		ui.text="CITY FREEDOM | MAKKAH 3D    %s    FPS: %d    [A] Drive / Walk" % ["DRIVING" if driving else "WALKING",Engine.get_frames_per_second()]
 func _update_camera():
 	var target=avatar.translation
-	camera.translation=target+Vector3(0,10,17)
+	camera.translation=target+Vector3(0,5.7,14.0)
 	camera.look_at(target+Vector3(0,1.8,0),Vector3.UP)
 func _input(event):
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.scancode==KEY_ENTER or event.scancode==KEY_SPACE or event.scancode==KEY_E:
 			_toggle_drive()
-	if event is InputEventJoypadButton and event.pressed and (event.button_index==0 or event.button_index==1):
-		_toggle_drive()
+		if event.scancode==KEY_B: _change_clothes()
+		if event.scancode==KEY_M: map_visible=!map_visible
+	if event is InputEventJoypadButton and event.pressed:
+		if event.button_index==0: _toggle_drive()
+		if event.button_index==1: _change_clothes()
+		if event.button_index==3: map_visible=!map_visible
 func _toggle_drive():
 	driving=!driving
 	avatar.visible=!driving
 	vehicle.visible=driving
+
+func _hits_building(p):
+	var q=Vector2(p.x,p.z)
+	for rect in collision_boxes:
+		if rect.grow(1.4 if driving else 0.4).has_point(q): return true
+	return false
+func _change_clothes():
+	wardrobe=true
+	clothes_index=(clothes_index+1)%4
+	var colors=[Color("#f4f2e9"),Color("#c7b48e"),Color("#353d4a"),Color("#e5d6bd")]
+	for child in avatar.get_children():
+		if child is MeshInstance and child.translation.y>0.8 and child.translation.y<2.5:
+			child.material_override=_mat(colors[clothes_index])
+func _make_landmarks():
+	# Lightweight 3D Makkah-inspired landmarks, all meshes generated at runtime.
+	var tower=Spatial.new()
+	tower.translation=Vector3(-235,0,-255)
+	add_child(tower)
+	_cube(tower,Vector3(0,52,0),Vector3(32,104,32),Color("#b9a68a"))
+	_cube(tower,Vector3(0,110,0),Vector3(36,16,36),Color("#d8c8a0"))
+	_cube(tower,Vector3(0,122,0),Vector3(24,12,24),Color("#365a61"))
+	_cube(tower,Vector3(0,135,0),Vector3(3,20,3),Color("#d6bc65"))
+	for side in [-1,1]:
+		_cube(tower,Vector3(0,110,side*18.1),Vector3(18,13,0.3),Color("#f0ead6"))
+	var haram=Spatial.new()
+	haram.translation=Vector3(225,0,-235)
+	add_child(haram)
+	_cube(haram,Vector3(0,2,0),Vector3(64,4,58),Color("#e9e1ce"))
+	for x in [-25,25]:
+		for z in [-21,21]:
+			_cube(haram,Vector3(x,21,z),Vector3(5,38,5),Color("#eee6d4"))
+			_cube(haram,Vector3(x,41,z),Vector3(7,3,7),Color("#b8aa8b"))
+	# Mountain silhouettes in the distance; not expensive terrain geometry.
+	for i in range(16):
+		var mountain=Spatial.new()
+		add_child(mountain)
+		var angle=float(i)*TAU/16.0
+		mountain.translation=Vector3(sin(angle)*480,0,cos(angle)*480)
+		_cube(mountain,Vector3(0,45,0),Vector3(rng.randf_range(45,85),90,rng.randf_range(40,70)),Color("#8b816c"))
