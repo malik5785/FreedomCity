@@ -1,0 +1,63 @@
+name: Build Android TV APK
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
+      - name: Prepare offline web assets
+        run: |
+          mkdir -p www
+          cp index.html www/index.html
+          test -s node_modules/three/build/three.min.js
+          cp node_modules/three/build/three.min.js www/three.min.js
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('www/index.html')
+          html=p.read_text()
+          url='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+          assert url in html, 'Three.js CDN script tag not found'
+          p.write_text(html.replace(url,'three.min.js'))
+          PY
+      - name: Create Android project
+        run: |
+          npx cap add android
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          s=s.replace('<application ', '<uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application ',1)
+          s=s.replace('<activity ', '<activity android:screenOrientation="landscape" ',1)
+          launcher='<category android:name="android.intent.category.LAUNCHER" />'
+          assert launcher in s, 'Android launcher category missing'
+          s=s.replace(launcher,launcher+'\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />',1)
+          p.write_text(s)
+          PY
+      - name: Compile debug APK
+        run: |
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Eyad-Rammah-Razzam-Android-TV-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
