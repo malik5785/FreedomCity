@@ -165,11 +165,11 @@ func _draw():
 		if c["pos"].distance_squared_to(player)>800*800: continue
 		var p=c["pos"]
 		var rot=c["dir"].angle()
-		draw_set_transform(p,rot)
+		draw_set_transform(p,rot,Vector2.ONE)
 		draw_rect(Rect2(-23,-12,46,24),Color("#151b22"))
 		draw_rect(Rect2(-19,-10,38,20),c["color"])
 		draw_rect(Rect2(-6,-8,14,16),Color("#83b6c7"))
-		draw_set_transform(Vector2.ZERO,0)
+		draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
 	if not driving:
 		draw_circle(player,14,Color("#f8f8ed"))
 		draw_circle(player+heading*8,6,Color("#e4ae75"))
