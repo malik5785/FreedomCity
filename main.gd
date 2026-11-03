@@ -2,8 +2,8 @@ extends Spatial
 # City Freedom Makkah - fresh low-poly 3D engine for GLES2 Android TV.
 const BLOCK = 140.0
 const ROAD = 26.0
-const WORLD = 5
-const VIEW = 360.0
+const WORLD = 3
+const VIEW = 260.0
 const WALK = 16.0
 const DRIVE = 55.0
 var avatar: Spatial
@@ -58,7 +58,7 @@ func _setup_world():
 	light.light_energy = 0.65
 	light.shadow_enabled = false
 	add_child(light)
-	var ground = _cube(self,Vector3(0,-0.5,0),Vector3(1600,1,1600),Color("#cbb68c"))
+	var ground = _cube(self,Vector3(0,-0.5,0),Vector3(1100,1,1100),Color("#cbb68c"))
 	ground.name="Sand"
 func _make_city():
 	var roads = []
@@ -107,7 +107,7 @@ func _make_city():
 	# Draw lane stripes as a single MultiMesh.
 	var stripes=[]
 	for n in range(-WORLD,WORLD+1):
-		for j in range(-40,41):
+		for j in range(-22,23):
 			stripes.append(Transform(Basis().scaled(Vector3(0.5,0.06,8)),Vector3(n*BLOCK,0.13,j*18)))
 			stripes.append(Transform(Basis().scaled(Vector3(8,0.06,0.5)),Vector3(j*18,0.13,n*BLOCK)))
 	var stripe=MultiMesh.new()
@@ -138,12 +138,12 @@ func _make_player():
 	vehicle.visible=false
 	camera=Camera.new()
 	camera.current=true
-	camera.far=420
+	camera.far=245
 	camera.fov=67
 	add_child(camera)
 	_update_camera()
 func _make_traffic():
-	for i in range(10):
+	for i in range(5):
 		var root=Spatial.new()
 		add_child(root)
 		var axis=i%2
@@ -154,7 +154,7 @@ func _make_traffic():
 		_cube(root,Vector3(0,0.7,0),Vector3(2.2,1.2,4.0),Color("#5a829a") if i%3==0 else Color("#d9d6cb"))
 		_cube(root,Vector3(0,1.55,0),Vector3(1.8,0.7,2.1),Color("#8cbac4"))
 		traffic.append([root,axis,1 if i%2==0 else -1,rng.randf_range(12,23)])
-	for i in range(14):
+	for i in range(5):
 		var root=Spatial.new()
 		add_child(root)
 		_cube(root,Vector3(0,0.95,0),Vector3(0.65,1.8,0.6),Color("#f7f3e8"))
@@ -186,7 +186,7 @@ func _physics_process(delta):
 		var direction=Vector3(input.x,0,input.y).normalized()
 		yaw=atan2(direction.x,direction.z)
 		var next=avatar.translation+direction*(DRIVE if driving else WALK)*delta
-		if abs(next.x)<690 and abs(next.z)<690:
+		if abs(next.x)<410 and abs(next.z)<410:
 			avatar.translation=next
 			vehicle.translation=next
 	avatar.rotation.y=yaw
@@ -195,21 +195,21 @@ func _physics_process(delta):
 		var p=t[0].translation
 		if t[1]==0: p.x+=t[2]*t[3]*delta
 		else: p.z+=t[2]*t[3]*delta
-		if p.x>680: p.x=-680
-		if p.x< -680: p.x=680
-		if p.z>680: p.z=-680
-		if p.z< -680: p.z=680
+		if p.x>400: p.x=-400
+		if p.x< -400: p.x=400
+		if p.z>400: p.z=-400
+		if p.z< -400: p.z=400
 		t[0].translation=p
 	for c in citizens:
 		var p=c[0].translation+c[1]*delta*2.5
-		if abs(p.x)>600: c[1]=-c[1]
+		if abs(p.x)>350: c[1]=-c[1]
 		else: c[0].translation=p
 	_update_camera()
 	if frame%30==0:
 		ui.text="CITY FREEDOM | MAKKAH 3D    %s    FPS: %d    [A] Drive / Walk" % ["DRIVING" if driving else "WALKING",Engine.get_frames_per_second()]
 func _update_camera():
 	var target=avatar.translation
-	camera.translation=target+Vector3(0,12,19)
+	camera.translation=target+Vector3(0,10,17)
 	camera.look_at(target+Vector3(0,1.8,0),Vector3.UP)
 func _input(event):
 	if event is InputEventKey and event.pressed and not event.echo:
