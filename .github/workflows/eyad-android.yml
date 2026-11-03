@@ -31,6 +31,14 @@ jobs:
         run: |
           set -eux
           mkdir -p build
+          keytool -genkeypair -noprompt -keystore build/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("export_presets.cfg")
+          s=p.read_text()
+          s += '\nkeystore/debug="build/debug.keystore"\nkeystore/debug_user="androiddebugkey"\nkeystore/debug_password="android"\n'
+          p.write_text(s)
+          PY
           ./Godot_v3.6.2-stable_linux_headless.64 --path . --editor --quit
           ./Godot_v3.6.2-stable_linux_headless.64 --path . --export-debug Android build/Eyad_Rammah_Razzam.apk
           test -s build/Eyad_Rammah_Razzam.apk
