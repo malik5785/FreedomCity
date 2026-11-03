@@ -150,7 +150,7 @@ func _draw():
 			draw_rect(Rect2(q+40,v-1.5,55,3),Color("#ead8a0"))
 	for b in buildings:
 		var r=b[0]
-		if r.get_center().distance_squared_to(player)>850*850: continue
+		if (r.position+r.size*0.5).distance_squared_to(player)>850*850: continue
 		draw_rect(r,Color("#947c61"))
 		draw_rect(Rect2(r.position+Vector2(0,-6),r.size-Vector2(6,6)),b[1])
 		draw_rect(Rect2(r.position+Vector2(12,12),Vector2(18,12)),Color("#608b9d"))
