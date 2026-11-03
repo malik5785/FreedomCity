@@ -34,6 +34,13 @@ var world_env: WorldEnvironment
 var clothes_index = 0
 var display_map: Label
 var info: Label
+var active_car = -1
+var car_specs = []
+var player_speed = 0.0
+var turn_angle = 0.0
+var horn_frames = 0
+var collision_objects = []
+var landmarks = []
 var road_names = ["العزيزية  Al Aziziyah", "العـدل  Al Adl", "المسفلة  Al Misfalah", "الشوقية  Al Shawqiyah"]
 func _ready():
 	rng.seed = 20261103
@@ -43,6 +50,7 @@ func _ready():
 	_make_player()
 	_make_traffic()
 	_make_landmarks()
+	_make_streetscape()
 	_make_ui()
 	set_physics_process(true)
 func _mat(c):
@@ -182,7 +190,7 @@ func _make_player():
 	add_child(camera)
 	_update_camera()
 func _make_traffic():
-	for i in range(24):
+	for i in range(36):
 		var root=Spatial.new()
 		add_child(root)
 		var axis=i%2
@@ -190,14 +198,29 @@ func _make_traffic():
 		var p=Vector3(rng.randf_range(-360,360),0,lane+(-7 if i%2==0 else 7))
 		if axis==1: p=Vector3(lane+7,0,rng.randf_range(-600,600))
 		root.translation=p
-		_cube(root,Vector3(0,0.7,0),Vector3(2.2,1.2,4.0),Color("#5a829a") if i%3==0 else Color("#d9d6cb"))
-		_cube(root,Vector3(0,1.55,0),Vector3(1.8,0.7,2.1),Color("#8cbac4"))
+		var car_colors=[Color("#f1f0e9"),Color("#222d3c"),Color("#a6b4b7"),Color("#8a3b35"),Color("#c7c3b6"),Color("#1d6583"),Color("#d5ad60"),Color("#3b3d3c"),Color("#7d8a70"),Color("#e8e5df")]
+		var typ=i%9
+		var size=Vector3(2.2,1.0,4.0)
+		if typ==1 or typ==4: size=Vector3(2.7,1.5,4.9)
+		if typ==5 or typ==6: size=Vector3(3.2,2.5,7.4)
+		if typ==2: size=Vector3(2.0,0.9,3.3)
+		_cube(root,Vector3(0,0.7,0),size,car_colors[i%10])
+		_cube(root,Vector3(0,1.55,0),Vector3(size.x*0.82,0.65,size.z*0.52),Color("#8cbac4"))
+		for wx in [-1,1]:
+			for wz in [-1,1]:
+				_cube(root,Vector3(wx*size.x*0.49,0.4,wz*size.z*0.32),Vector3(0.3,0.7,0.75),Color("#222428"))
+		if typ==8:
+			_cube(root,Vector3(0,2.05,0),Vector3(0.9,0.15,0.4),Color("#e33a36"))
 		traffic.append([root,axis,1 if i%2==0 else -1,rng.randf_range(12,23)])
+		car_specs.append([i%9,i%10])
 	for i in range(12):
 		var root=Spatial.new()
 		add_child(root)
-		_cube(root,Vector3(0,0.95,0),Vector3(0.65,1.8,0.6),Color("#f7f3e8"))
+		_cube(root,Vector3(0,0.95,0),Vector3(0.65,1.8,0.6),Color("#f7f3e8") if i%3!=0 else Color("#282d36"))
 		_cube(root,Vector3(0,2.1,0),Vector3(0.55,0.55,0.55),Color("#c8996c"))
+		_cube(root,Vector3(0,2.5,0),Vector3(0.68,0.18,0.65),Color("#f7f4ea") if i%2==0 else Color("#222b35"))
+		for arm in [-1,1]:
+			_cube(root,Vector3(arm*0.43,1.35,0),Vector3(0.2,1.0,0.25),Color("#f7f3e8") if i%3!=0 else Color("#282d36"))
 		root.translation=Vector3(rng.randi_range(-2,2)*BLOCK+18,0,rng.randi_range(-4,4)*BLOCK+24)
 		citizens.append([root,Vector3(1 if i%2==0 else -1,0,0)])
 func _make_ui():
@@ -232,9 +255,15 @@ func _physics_process(delta):
 		var direction=Vector3(input.x,0,input.y).normalized()
 		yaw=atan2(direction.x,direction.z)
 		var next=avatar.translation+direction*(DRIVE if driving else WALK)*delta
-		if abs(next.x)<410 and abs(next.z)<410 and not _hits_building(next):
+		if abs(next.x)<410 and abs(next.z)<410 and not _hits_building(next) and not _hits_obstacle(next):
 			avatar.translation=next
 			vehicle.translation=next
+			if driving and active_car>=0:
+				traffic[active_car][0].translation=next
+				traffic[active_car][0].rotation.y=yaw
+			player_speed=next.distance_to(avatar.translation)/max(delta,0.001)
+	else:
+		player_speed=0.0
 	var swing=sin(frame*0.23)*0.42 if input.length_squared()>0.01 else 0.0
 	arm_left.rotation.x=swing
 	arm_right.rotation.x=-swing
@@ -243,6 +272,7 @@ func _physics_process(delta):
 	avatar.rotation.y=yaw
 	vehicle.rotation.y=yaw
 	for t in traffic:
+		if driving and active_car>=0 and t[0]==traffic[active_car][0]: continue
 		var p=t[0].translation
 		if t[1]==0: p.x+=t[2]*t[3]*delta
 		else: p.z+=t[2]*t[3]*delta
@@ -250,7 +280,11 @@ func _physics_process(delta):
 		if p.x< -400: p.x=400
 		if p.z>400: p.z=-400
 		if p.z< -400: p.z=400
-		t[0].translation=p
+		var near_player=p.distance_to(avatar.translation)<5.5
+		var near_ped=false
+		for c in citizens:
+			if p.distance_to(c[0].translation)<4.0: near_ped=true
+		if not near_player and not near_ped: t[0].translation=p
 	for c in citizens:
 		var p=c[0].translation+c[1]*delta*2.5
 		if abs(p.x)>350: c[1]=-c[1]
@@ -262,7 +296,7 @@ func _physics_process(delta):
 		world_env.environment.background_color=Color("#8fc2dc") if daylight else Color("#1a2540")
 		day_light.light_energy=0.65 if daylight else 0.12
 		display_map.text=("MAP  " + str(avatar.translation.x).pad_decimals(0) + " / " + str(avatar.translation.z).pad_decimals(0) + "   AL ADL - MAKKAH") if map_visible else ("CLOTHES  " + str(clothes_index+1) + " / 4  [B TO CHANGE]") if wardrobe else ""
-		ui.text="CITY FREEDOM | MAKKAH 3D    %s    FPS: %d    [A] Drive / Walk" % ["DRIVING" if driving else "WALKING",Engine.get_frames_per_second()]
+		ui.text="CITY FREEDOM | MAKKAH 3D    %s    FPS: %d    [OK] CAR  [B] CLOTHES  [Y] MAP" % ["DRIVING" if driving else "WALKING",Engine.get_frames_per_second()]
 func _update_camera():
 	var target=avatar.translation
 	camera.translation=target+Vector3(0,5.7,14.0)
@@ -272,15 +306,33 @@ func _input(event):
 		if event.scancode==KEY_ENTER or event.scancode==KEY_SPACE or event.scancode==KEY_E:
 			_toggle_drive()
 		if event.scancode==KEY_B: _change_clothes()
+		if event.scancode==KEY_H: horn_frames=20
 		if event.scancode==KEY_M: map_visible=!map_visible
 	if event is InputEventJoypadButton and event.pressed:
 		if event.button_index==0: _toggle_drive()
 		if event.button_index==1: _change_clothes()
 		if event.button_index==3: map_visible=!map_visible
+		if event.button_index==2: horn_frames=20
 func _toggle_drive():
-	driving=!driving
-	avatar.visible=!driving
-	vehicle.visible=driving
+	if driving:
+		driving=false
+		active_car=-1
+		avatar.visible=true
+		vehicle.visible=false
+		return
+	var nearest=9.0
+	var choice=-1
+	for i in range(traffic.size()):
+		var d=traffic[i][0].translation.distance_to(avatar.translation)
+		if d<nearest:
+			nearest=d
+			choice=i
+	if choice<0: return
+	active_car=choice
+	driving=true
+	avatar.translation=traffic[choice][0].translation
+	vehicle.visible=false
+	avatar.visible=false
 
 func _hits_building(p):
 	var q=Vector2(p.x,p.z)
@@ -320,3 +372,36 @@ func _make_landmarks():
 		var angle=float(i)*TAU/16.0
 		mountain.translation=Vector3(sin(angle)*480,0,cos(angle)*480)
 		_cube(mountain,Vector3(0,45,0),Vector3(rng.randf_range(45,85),90,rng.randf_range(40,70)),Color("#8b816c"))
+
+func _hits_obstacle(p):
+	var q=Vector2(p.x,p.z)
+	for obj in collision_objects:
+		if q.distance_squared_to(obj[0])<pow(obj[1]+(1.4 if driving else 0.5),2): return true
+	return false
+func _make_streetscape():
+	# Street furniture is fixed in world coordinates and checked with cheap 2D circles.
+	for gx in range(-WORLD,WORLD):
+		for gz in range(-WORLD,WORLD):
+			var x=(gx+0.5)*BLOCK
+			var z=(gz+0.5)*BLOCK
+			var lamp=Spatial.new()
+			lamp.translation=Vector3(x-54,0,z-54)
+			add_child(lamp)
+			_cube(lamp,Vector3(0,5,0),Vector3(0.35,10,0.35),Color("#4b5558"))
+			_cube(lamp,Vector3(0,10,0),Vector3(2.0,0.45,1.0),Color("#f7e8af"))
+			collision_objects.append([Vector2(lamp.translation.x,lamp.translation.z),0.8])
+			if (gx+gz)%2==0:
+				var palm=Spatial.new()
+				palm.translation=Vector3(x+53,0,z-53)
+				add_child(palm)
+				_cube(palm,Vector3(0,5,0),Vector3(1.1,10,1.1),Color("#8e6947"))
+				for n in range(4):
+					var leaf=_cube(palm,Vector3(0,10.8,0),Vector3(1.0,0.6,9),Color("#49744a"))
+					leaf.rotation.y=float(n)*PI/4.0
+				collision_objects.append([Vector2(palm.translation.x,palm.translation.z),1.3])
+			var sign=Spatial.new()
+			sign.translation=Vector3(x-54,0,z+53)
+			add_child(sign)
+			_cube(sign,Vector3(0,3,0),Vector3(0.25,6,0.25),Color("#555c59"))
+			_cube(sign,Vector3(0,6,0),Vector3(7,2.1,0.35),Color("#237153"))
+			collision_objects.append([Vector2(sign.translation.x,sign.translation.z),0.7])
