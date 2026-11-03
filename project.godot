@@ -1,28 +1,22 @@
-; Engine configuration file.
 config_version=4
 
 [application]
-
-config/name="City Freedom Makkah"
+config/name="CITY FREEDOM MAKKAH - NEW"
 run/main_scene="res://main.tscn"
-config/quit_on_go_back=false
-config/icon="res://icon.png"
 
 [display]
-
 window/size/width=960
 window/size/height=540
 window/handheld/orientation="landscape"
-window/stretch/mode="viewport"
-window/stretch/aspect="keep"
+window/stretch/mode="2d"
+window/stretch/aspect="expand"
 
 [rendering]
-
 quality/driver/driver_name="GLES2"
-vram_compression/import_etc=true
-vram_compression/import_etc2=true
 quality/filters/msaa=0
+quality/intended_usage/framebuffer_allocation=2
+environment/default_environment=""
+vram_compression/import_etc=true
 
 [physics]
-
-common/physics_fps=40
+common/physics_fps=60
