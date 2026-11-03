@@ -41,6 +41,7 @@ var turn_angle = 0.0
 var horn_frames = 0
 var collision_objects = []
 var landmarks = []
+var material_cache = {}
 var road_names = ["العزيزية  Al Aziziyah", "العـدل  Al Adl", "المسفلة  Al Misfalah", "الشوقية  Al Shawqiyah"]
 func _ready():
 	rng.seed = 20261103
@@ -54,9 +55,12 @@ func _ready():
 	_make_ui()
 	set_physics_process(true)
 func _mat(c):
+	var key = c.to_html()
+	if material_cache.has(key): return material_cache[key]
 	var m = SpatialMaterial.new()
 	m.albedo_color = c
 	m.flags_unshaded = true
+	material_cache[key] = m
 	return m
 func _cube(parent, pos, size, color):
 	var mi = MeshInstance.new()
@@ -136,7 +140,7 @@ func _make_city():
 	# Draw lane stripes as a single MultiMesh.
 	var stripes=[]
 	for n in range(-WORLD,WORLD+1):
-		for j in range(-22,23):
+		for j in range(-18,19):
 			stripes.append(Transform(Basis().scaled(Vector3(0.5,0.06,8)),Vector3(n*BLOCK,0.13,j*18)))
 			stripes.append(Transform(Basis().scaled(Vector3(8,0.06,0.5)),Vector3(j*18,0.13,n*BLOCK)))
 	var stripe=MultiMesh.new()
@@ -185,12 +189,12 @@ func _make_player():
 	vehicle.visible=false
 	camera=Camera.new()
 	camera.current=true
-	camera.far=245
+	camera.far=220
 	camera.fov=67
 	add_child(camera)
 	_update_camera()
 func _make_traffic():
-	for i in range(36):
+	for i in range(18):
 		var root=Spatial.new()
 		add_child(root)
 		var axis=i%2
@@ -214,7 +218,7 @@ func _make_traffic():
 			_cube(root,Vector3(0,2.05,0),Vector3(0.9,0.15,0.4),Color("#e33a36"))
 		traffic.append([root,axis,1 if i%2==0 else -1,rng.randf_range(12,23)])
 		car_specs.append([i%9,i%10])
-	for i in range(12):
+	for i in range(8):
 		var root=Spatial.new()
 		add_child(root)
 		_cube(root,Vector3(0,0.95,0),Vector3(0.65,1.8,0.6),Color("#f7f3e8") if i%3!=0 else Color("#282d36"))
@@ -327,7 +331,7 @@ func _toggle_drive():
 		avatar.visible=true
 		vehicle.visible=false
 		return
-	var nearest=9.0
+	var nearest=12.0
 	var choice=-1
 	for i in range(traffic.size()):
 		var d=traffic[i][0].translation.distance_to(avatar.translation)
@@ -373,7 +377,7 @@ func _make_landmarks():
 			_cube(haram,Vector3(x,21,z),Vector3(5,38,5),Color("#eee6d4"))
 			_cube(haram,Vector3(x,41,z),Vector3(7,3,7),Color("#b8aa8b"))
 	# Mountain silhouettes in the distance; not expensive terrain geometry.
-	for i in range(16):
+	for i in range(8):
 		var mountain=Spatial.new()
 		add_child(mountain)
 		var angle=float(i)*TAU/16.0
