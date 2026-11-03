@@ -1,0 +1,172 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>City Freedom Makkah</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#111;font-family:system-ui,sans-serif;color:#fff;user-select:none;touch-action:none}
+canvas{display:block}.a{position:fixed}
+.pill{background:rgba(20,25,30,.75);border-radius:14px;padding:8px 14px;font-weight:700}
+button{font:inherit;color:#fff;background:rgba(20,25,30,.8);border:2px solid #555;border-radius:50%;cursor:pointer}
+button:focus,button:hover{outline:3px solid #ffd54a}
+#bar{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:6px;background:rgba(20,25,30,.8);border-radius:22px;padding:6px 10px}
+#bar button{border:0;border-radius:14px;padding:6px 12px;font-size:13px;background:none}
+#bar button b{display:block;font-size:24px}
+#mm{left:70px;top:8px;border-radius:50%;border:4px solid #333;width:150px;height:150px}
+#jb{left:24px;bottom:24px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid #fff6}
+#jk{position:absolute;width:64px;height:64px;border-radius:50%;background:#ddd;left:43px;top:43px}
+.rb{width:64px;height:64px;font-size:26px}
+#pn{display:none;left:8%;right:8%;top:8%;bottom:16%;background:rgba(15,20,25,.94);border-radius:18px;padding:18px;overflow:auto;z-index:5}
+#pn button{border-radius:12px;padding:12px 16px;margin:5px;font-size:16px}
+.bar{width:150px;height:12px;border-radius:6px;background:#0006;margin:4px 0}.bar i{display:block;height:100%;border-radius:6px}
+#spd{right:20px;bottom:20px;width:120px;height:120px;border-radius:50%;background:rgba(10,12,15,.85);border:3px solid #444;text-align:center;display:none}
+</style></head><body>
+<canvas id="mm" class="a" width="150" height="150"></canvas>
+<button class="a rb" style="left:8px;top:8px;width:50px;height:50px" id="pz">❚❚</button>
+<div class="a pill" style="right:380px;top:12px" id="clk"></div>
+<div class="a pill" style="right:150px;top:12px;color:#8f8">SAR <span id="mny">50,000</span> <span style="color:#4f4">＋</span></div>
+<div class="a" style="right:90px;top:62px"><div class="bar"><i id="hp" style="background:#e33;width:100%"></i></div><div class="bar"><i id="en" style="background:#3af;width:100%"></i></div></div>
+<div class="a pill" style="left:240px;top:12px;font-size:13px" id="ms"></div>
+<div class="a" id="jb"><div id="jk"></div></div>
+<div class="a" style="right:20px;top:130px;display:flex;flex-direction:column;gap:12px">
+<button class="rb" id="bCar">🚗</button><button class="rb" id="bRun">🏃</button><button class="rb" id="bJump">⬆</button><button class="rb" id="bPunch">👊</button></div>
+<div class="a" id="spd"><div style="font-size:38px;margin-top:30px;font-weight:800" id="kmh">0</div>KM/H</div>
+<div class="a" id="bar"></div><div class="a" id="pn"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=i=>document.getElementById(i),rnd=(a,b)=>a+Math.random()*(b-a),PI=Math.PI;
+const R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,1.5));R.setSize(innerWidth,innerHeight);document.body.prepend(R.domElement);
+const S=new THREE.Scene(),cam=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,1500);
+S.fog=new THREE.Fog(0xbfe0f5,150,800);
+const hemi=new THREE.HemisphereLight(0xffffff,0xb9a98a,.9),sun=new THREE.DirectionalLight(0xfff2d0,.8);sun.position.set(60,100,40);S.add(hemi,sun);
+addEventListener('resize',()=>{R.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()});
+const M=(c,o)=>new THREE.MeshLambertMaterial(Object.assign({color:c},o));
+function box(w,h,d,c,x,y,z,p=S,o){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c,o));m.position.set(x,y,z);p.add(m);return m}
+function cyl(a,b,h,c,x,y,z,p=S,s=10){const m=new THREE.Mesh(new THREE.CylinderGeometry(a,b,h,s),M(c));m.position.set(x,y,z);p.add(m);return m}
+function tex(t,bg,fg,fs=34){const c=document.createElement('canvas');c.width=256;c.height=96;const x=c.getContext('2d');x.fillStyle=bg;x.fillRect(0,0,256,96);x.fillStyle=fg;x.font='bold '+fs+'px sans-serif';x.textAlign='center';x.textBaseline='middle';const L=t.split('|');L.forEach((l,i)=>x.fillText(l,128,96*(i+1)/(L.length+1)));return new THREE.CanvasTexture(c)}
+function sign(t,bg,fg,w,x,y,z,ry,fs){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,w*.375),new THREE.MeshBasicMaterial({map:tex(t,bg,fg,fs)}));m.position.set(x,y,z);m.rotation.y=ry;S.add(m);return m}
+const ZMIN=-320,ZMAX=120;
+// ground, road, sidewalks
+box(900,.2,1200,0xcdb98f,0,-.2,-200);box(17,.3,ZMAX-ZMIN+80,0x3a3a3e,0,0,(ZMAX+ZMIN)/2);
+[-1,1].forEach(s=>{box(8,.5,ZMAX-ZMIN+80,0xd9cfba,s*12,.05,(ZMAX+ZMIN)/2);box(.3,.02,ZMAX-ZMIN+80,0xe8b923,s*8.4,.2,(ZMAX+ZMIN)/2)});
+box(.25,.02,ZMAX-ZMIN+80,0xf0c020,0,.2,(ZMAX+ZMIN)/2);
+// buildings
+const wc=document.createElement('canvas');wc.width=64;wc.height=128;{const x=wc.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,64,128);x.fillStyle='#7d93a8';for(let i=0;i<8;i++)for(let j=0;j<4;j++)x.fillRect(5+j*15,5+i*15,9,9)}
+const wt=new THREE.CanvasTexture(wc);
+const SH=[['BinDawood|بن داود','#14224a','#fff'],['stc','#6a2fc0','#fff'],['McDonald’s|ماكدونالدز','#c8102e','#ffc72c'],['Starbucks|ستاربكس','#0b6b45','#fff'],['Supermarket|سوبر ماركت','#6b1f3d','#fff'],['Pharmacy|صيدلية','#1c7c3c','#fff']];
+let k=0;
+[-1,1].forEach(s=>{for(let z=ZMAX+60;z>ZMIN-20;z-=22){const w=rnd(16,26),h=rnd(22,70);
+ const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,20),M([0xe6dcc8,0xd8c9ad,0xcfd4d8,0xeadfca][k%4],{map:wt}));b.position.set(s*(16+w/2),h/2,z);S.add(b);
+ const t=SH[k++%6];sign(t[0],t[1],t[2],10,s*16.2,3.6,z,-s*PI/2,30);
+ box(w*.7,h*.6,20,0xcfc6b2,s*(60+w/2),h*.8,z)}});
+// palms & lamps
+function palm(x,z){const g=new THREE.Group();cyl(.25,.4,7,0x8a6a40,0,3.5,0,g,6);for(let i=0;i<7;i++){const l=box(5,.12,1.1,0x2e7d32,0,7.2,0,g);l.rotation.y=i*PI/3.5;l.rotation.z=.35;l.translateX(2.2)}g.position.set(x,0,z);S.add(g)}
+for(let z=ZMAX;z>ZMIN;z-=14){[-1,1].forEach(s=>{palm(s*15,z);const x=s*9.2,zz=z-7;cyl(.12,.15,8,0x333,x,4,zz);box(2.2,.2,.2,0x333,x-s*1,8,zz);const b=new THREE.Mesh(new THREE.SphereGeometry(.35,8,6),new THREE.MeshBasicMaterial({color:0xfff2b0}));b.position.set(x-s*2,7.8,zz);S.add(b)})}
+// gantry signs
+{const z=20;[-14,14].forEach(x=>cyl(.4,.4,10,0x555,x,5,z));box(30,.6,.6,0x555,0,10,z);
+ [['المسجد الحرام|Al Masjid Al Haram',-10.5],['العزيزية|Al Aziziyah',-3.5],['العدل|Al Adl',3.5],['الروضة|Al Rawdah',10.5]].forEach(a=>sign(a[0],'#0b5d3a','#fff',6.6,a[1],8.2,z+.4,0,24));
+ sign('P|موقف الحرم Haram Parking','#1d4fb3','#fff',7,-14,4.2,-150,PI/2*0+.0,22)}
+// Landmarks: clock tower + Haram
+const gold=0xd9a82e;box(44,70,44,0xd8c7a0,18,35,-330);box(30,130,30,0xcdbb92,18,135,-330);
+[[-14,100],[50,100]].forEach(a=>box(26,a[1],26,0xc9b890,a[0]+8,a[1]/2,-325));
+const face=new THREE.Mesh(new THREE.CircleGeometry(11,24),new THREE.MeshBasicMaterial({color:0xf4f4ef}));face.position.set(18,150,-314.8);S.add(face);
+box(1,8,.3,0x111,18,152,-314.6);box(6,.8,.3,0x111,21,150,-314.6);
+const sp=cyl(0,6,50,gold,18,225,-330,S,8);box(8,8,8,gold,18,203,-330);
+for(let i=0;i<4;i++){const m=box(7,1,7,gold,18,100+i*0,-330);m.visible=false}
+const hr=box(240,16,40,0xf2efe6,0,8,-360);
+[-95,-60,60,95].forEach(x=>{cyl(3,3.6,75,0xf2efe6,x,37,-345);cyl(0,3.6,12,0x2e8b57,x,81,-345);cyl(4.4,4.4,2,gold,x,60,-345)});
+for(let i=0;i<7;i++){const m=new THREE.Mesh(new THREE.ConeGeometry(rnd(60,100),rnd(60,100),6),M(0x8d6c52));m.position.set((i%2?1:-1)*rnd(120,260),30,rnd(-300,0));S.add(m)}
+// people
+function person(c,sh,sc=1){const g=new THREE.Group(),u={};
+ u.body=cyl(.32,.45,1.5,c,0,1.1,0,g);const hd=new THREE.Mesh(new THREE.SphereGeometry(.22,10,8),M(0xc68a5c));hd.position.y=2.05;g.add(hd);
+ u.hat=new THREE.Mesh(new THREE.SphereGeometry(.27,10,8,0,6.3,0,1.8),shM);u.hat.position.y=2.1;u.hat.visible=!!sh;g.add(u.hat);
+ u.arms=[-1,1].map(s=>{const a=cyl(.09,.09,.9,c,s*.45,1.4,0,g,6);return a});u.feet=[-1,1].map(s=>box(.2,.12,.35,0x222,s*.17,.08,0,g));
+ g.scale.setScalar(sc);g.userData=u;S.add(g);return g}
+const sc=document.createElement('canvas');sc.width=sc.height=32;{const x=sc.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,32,32);x.strokeStyle='#d01c28';x.lineWidth=5;x.strokeRect(0,0,32,32)}
+const shT=new THREE.CanvasTexture(sc);shT.wrapS=shT.wrapT=THREE.RepeatWrapping;shT.repeat.set(4,3);const shM=new THREE.MeshLambertMaterial({map:shT});
+const peds=[];for(let i=0;i<40;i++){const wom=Math.random()<.4,p=person(wom?0x151515:0xf5f5f5,!wom&&Math.random()<.5);const s=Math.random()<.5?-1:1;p.position.set(s*rnd(9.5,14),0,rnd(ZMIN,ZMAX));p.userData.d=Math.random()<.5?1:-1;peds.push(p)}
+// cars
+function car(c,t){const g=new THREE.Group(),suv=t=='suv',w=suv?2.1:1.9;
+ box(w,.8,4.4,c,0,.8,0,g);box(w-.3,.7,suv?2.8:2.1,c,0,1.5,suv?.3:.4,g);box(w-.1,.45,suv?2.85:2.15,0x1c2733,0,1.55,suv?.3:.4,g);
+ [[-1,-1.4],[1,-1.4],[-1,1.4],[1,1.4]].forEach(a=>{const m=cyl(.4,.4,.3,0x111,a[0]*w/2,.4,a[1],g,12);m.rotation.z=PI/2});
+ [-1,1].forEach(s=>{box(.4,.2,.1,0xfff6c0,s*.7,.9,-2.2,g,{emissive:0x888844});box(.4,.2,.1,0xc00,s*.7,.9,2.2,g)});
+ if(t=='police'){box(w+.02,.25,4.42,0x1f6b3a,0,.8,0,g);const a=box(.5,.2,.4,0xe00,-.4,2,.3,g),b=box(.5,.2,.4,0x04f,.4,2,.3,g);g.userData.l=[a,b]}
+ g.userData.v=0;S.add(g);return g}
+const CARS=[['Toyota Camry',0xf2f2f2,'sedan'],['Land Cruiser',0x151515,'suv'],['Lexus',0xb8bcc2,'sedan'],['Hyundai',0x2a5db0,'sedan'],['Kia',0xb02a2a,'sedan'],['Nissan',0x777b80,'suv'],['Ford',0xd9822b,'suv'],['Taxi',0x1a9e5c,'sedan'],['Police',0xffffff,'police']];
+const traffic=[],own=[];
+for(let i=0;i<22;i++){const d=CARS[(Math.random()*9)|0],c=car(d[1],d[2]),dir=i%2?1:-1;c.position.set(dir<0?4:-4,0,rnd(ZMIN,ZMAX));c.rotation.y=dir<0?0:PI;c.userData.sp=rnd(7,13);c.userData.dir=dir;traffic.push(c)}
+function addOwn(i,x,z,h=0){const d=CARS[i],c=car(d[1],d[2]);c.position.set(x,0,z);c.rotation.y=h;c.userData.h=h;c.userData.name=d[0];own.push(c);if(own.length>8){S.remove(own.shift())}return c}
+addOwn(0,5.5,86);addOwn(1,5.5,70);
+// player
+const P=person(0xffffff,true,.85);P.position.set(11,.5,92);let ph=0,car_=null,hp=100,en=100,money=50000,yaw=0,pitch=.35,run=false,vy=0,paused=false,T=10.4,punch=0;
+// mission
+const bc=cyl(2.5,2.5,40,0xffd54a,0,20,0,S,16);bc.material=new THREE.MeshBasicMaterial({color:0xffd54a,transparent:true,opacity:.35});
+function newM(){bc.position.set(rnd(-1,1)>0?11:-11,20,rnd(-280,-60));$('ms').textContent='Mission: reach the golden beacon ⇢ +SAR 500'}newM();
+// input
+const K={};let jx=0,jy=0,pad={};
+addEventListener('keydown',e=>{K[e.code]=1;if(e.code=='KeyF'||e.code=='Enter')toggleCar();if(/^Digit[1-6]$/.test(e.code))menu(+e.code[5]-1);if(e.code=='Escape')$('pn').style.display='none',paused=false});
+addEventListener('keyup',e=>K[e.code]=0);
+const jb=$('jb'),jk=$('jk');function jm(e){const r=jb.getBoundingClientRect(),x=e.clientX-r.left-75,y=e.clientY-r.top-75,m=Math.min(1,Math.hypot(x,y)/60),a=Math.atan2(y,x);jx=Math.cos(a)*m;jy=-Math.sin(a)*m;jk.style.left=43+jx*55+'px';jk.style.top=43-jy*55+'px'}
+jb.onpointerdown=e=>{jb.setPointerCapture(e.pointerId);jm(e);jb.onpointermove=jm};jb.onpointerup=()=>{jb.onpointermove=null;jx=jy=0;jk.style.left=jk.style.top='43px'};
+let dr=null;R.domElement.onpointerdown=e=>dr=[e.clientX,e.clientY];addEventListener('pointerup',()=>dr=null);
+R.domElement.onpointermove=e=>{if(dr){yaw-=(e.clientX-dr[0])*.006;pitch=Math.max(.1,Math.min(1,pitch+(e.clientY-dr[1])*.004));dr=[e.clientX,e.clientY]}};
+$('bCar').onclick=toggleCar;$('bRun').onclick=()=>run=!run;$('bJump').onclick=()=>{if(P.position.y<=.55&&!car_)vy=7};$('bPunch').onclick=()=>punch=.3;$('pz').onclick=()=>{paused=!paused};
+function toggleCar(){if(car_){P.position.set(car_.position.x+(car_.position.x>0?-3:3),.5,car_.position.z);P.visible=true;car_.userData.v=0;car_=null;$('spd').style.display='none';return}
+ let b=null,bd=6;own.concat(traffic).forEach(c=>{const d=Math.hypot(c.position.x-P.position.x,c.position.z-P.position.z);if(d<bd){bd=d;b=c}});
+ if(b){const i=traffic.indexOf(b);if(i>=0){traffic.splice(i,1);own.push(b);b.userData.h=b.rotation.y;b.userData.v=0}car_=b;P.visible=false;$('spd').style.display='block'}}
+// audio
+let AC,osc,gn,snd=true;function aud(){if(AC)return;try{AC=new AudioContext();osc=AC.createOscillator();gn=AC.createGain();osc.type='sawtooth';gn.gain.value=0;osc.connect(gn).connect(AC.destination);osc.start()}catch(e){}}addEventListener('pointerdown',aud);addEventListener('keydown',aud);
+// UI bar & panels
+const MN=[['🚗','Vehicles'],['👕','Change Clothes'],['🛒','Shop'],['🏠','Home'],['📍','Map'],['⚙','Settings']];
+$('bar').innerHTML=MN.map((m,i)=>`<button onclick="menu(${i})"><b>${m[0]}</b>${m[1]}</button>`).join('');
+const OUT=[['White',0xf5f5f5],['Black',0x151515],['Beige',0xd9c29a],['Grey',0x8a8f94],['Blue',0x2c4a7a]];
+function menu(i){const p=$('pn');paused=true;p.style.display='block';let h=`<button style="float:right" onclick="closeP()">✕</button><h2>${MN[i][1]}</h2>`;
+ if(i==0)h+=CARS.map((c,k)=>`<button onclick="addOwn(${k},P.position.x+3,P.position.z-4,0);closeP()">${c[0]}</button>`).join('');
+ if(i==1)h+='<p>Thobe</p>'+OUT.map((c,k)=>`<button onclick="P.userData.body.material.color.set(${c[1]});P.userData.arms.forEach(a=>a.material.color.set(${c[1]}))">${c[0]}</button>`).join('')+'<p>Head</p><button onclick="P.userData.hat.visible=true;shM.map=shT;shM.color.set(0xffffff);shM.needsUpdate=true">Red shemagh</button><button onclick="P.userData.hat.visible=true;shM.map=null;shM.color.set(0xffffff);shM.needsUpdate=true">White ghutra</button><button onclick="P.userData.hat.visible=false">None</button>';
+ if(i==2)h+=`<button onclick="buy(5,0,40)">Water — SAR 5</button><button onclick="buy(30,40,10)">Meal — SAR 30</button><button onclick="buy(15,10,60)">Energy drink — SAR 15</button>`;
+ if(i==3)h+='<button onclick="P.position.set(11,.5,92);if(car_)toggleCar();P.position.set(11,.5,92);hp=100;en=100;closeP()">Go home &amp; rest</button><button onclick="T=6.5;closeP()">Sleep until morning</button>';
+ if(i==4){h+='<canvas id="fm" width="640" height="340" style="max-width:100%;border-radius:12px"></canvas>';p.innerHTML=h;fullMap();return}
+ if(i==5)h+='<button onclick="snd=!snd">Toggle sound</button><button onclick="R.setPixelRatio(1);R.setSize(innerWidth,innerHeight)">Graphics: Fast</button><button onclick="R.setPixelRatio(Math.min(devicePixelRatio,1.5));R.setSize(innerWidth,innerHeight)">Graphics: High</button><button onclick="T=20.5;closeP()">Night time</button><button onclick="T=10.4;closeP()">Day time</button><p>Controls: WASD/stick move · Shift run · Space jump · F/Enter enter car · Drag/right stick camera · 1–6 menus</p>';
+ p.innerHTML=h}
+function closeP(){$('pn').style.display='none';paused=false}
+function buy(c,h,e){if(money>=c){money-=c;hp=Math.min(100,hp+h);en=Math.min(100,en+e)}}
+function fullMap(){const c=$('fm').getContext('2d');c.fillStyle='#2b3a2f';c.fillRect(0,0,640,340);c.strokeStyle='#d8b24a';c.lineWidth=3;for(let i=1;i<6;i++){c.beginPath();c.arc(320,170,i*50,0,7);c.stroke()}c.fillStyle='#fff';c.font='bold 15px sans-serif';
+ [['Al Haram | المسجد الحرام',250,170],['Al Aziziyah',90,60],['Al Adl',470,50],['Al Rawdah',520,150],['Al Rusayfah',480,230],['Al Misfalah',300,300],['Al Shisha',420,280],['Al Maabdah',90,290],['Al Awali',40,170]].forEach(a=>c.fillText(a[0],a[1],a[2]));
+ c.fillStyle='#4af';c.beginPath();c.arc(320,170-(((car_||P).position.z-ZMIN)/(ZMAX-ZMIN)-.5)*-200,9,0,7);c.fill()}
+// game loop
+const mm=$('mm').getContext('2d'),clk=new THREE.Clock();let tt=0;
+function loop(){requestAnimationFrame(loop);const dt=Math.min(clk.getDelta(),.05);if(!paused)upd(dt);R.render(S,cam)}
+function upd(dt){tt+=dt;T=(T+dt*.5/60)%24;
+ const g=(navigator.getGamepads&&navigator.getGamepads()[0]);let gx=0,gy=0;if(g){gx=Math.abs(g.axes[0])>.15?g.axes[0]:0;gy=Math.abs(g.axes[1])>.15?-g.axes[1]:0;if(Math.abs(g.axes[2])>.2)yaw-=g.axes[2]*dt*2.5;if(g.buttons[0].pressed&&!pad.a)toggleCar();if(g.buttons[3].pressed&&!pad.y)menu(0);if(g.buttons[1].pressed&&!pad.b)$('bJump').onclick();pad.a=g.buttons[0].pressed;pad.y=g.buttons[3].pressed;pad.b=g.buttons[1].pressed;if(g.buttons[7].pressed)gy=1;if(g.buttons[6].pressed)gy=-1}
+ const ix=(K.KeyD||K.ArrowRight?1:0)-(K.KeyA||K.ArrowLeft?1:0)+jx+gx,iy=(K.KeyW||K.ArrowUp?1:0)-(K.KeyS||K.ArrowDown?1:0)+jy+gy;
+ if(K.KeyQ)yaw+=dt*1.5;if(K.KeyE)yaw-=dt*1.5;
+ const d=Math.max(.08,Math.min(1,Math.sin((T-6)*PI/12)*1.5+.35));S.background=new THREE.Color(0x7ec8f5).multiplyScalar(d).add(new THREE.Color(0x050a1c).multiplyScalar(1-d));S.fog.color.copy(S.background);hemi.intensity=.2+.75*d;sun.intensity=.9*d;
+ const hh=Math.floor(T),mn=Math.floor((T-hh)*60);$('clk').textContent=(d>.3?'☀ ':'🌙 ')+((hh+11)%12+1)+':'+String(mn).padStart(2,'0')+(hh<12?' AM':' PM')+' · Makkah';
+ if(car_){const u=car_.userData,sp=u.v;u.v+=(Math.max(-1,Math.min(1,iy))*(iy>0?14:18))*dt;if(!iy||(K.Space))u.v*=1-Math.min(1,(K.Space?3:.6)*dt);u.v=Math.max(-8,Math.min(34,u.v));
+  u.h-=Math.max(-1,Math.min(1,ix))*dt*1.6*Math.min(1,Math.abs(u.v)/6)*Math.sign(u.v||1);car_.rotation.y=u.h;car_.position.x-=Math.sin(u.h)*u.v*dt;car_.position.z-=Math.cos(u.h)*u.v*dt;
+  if(Math.abs(car_.position.x)>14.5){car_.position.x=Math.sign(car_.position.x)*14.5;u.v*=.5}car_.position.z=Math.max(ZMIN,Math.min(ZMAX+40,car_.position.z));
+  traffic.forEach(t=>{if(Math.hypot(t.position.x-car_.position.x,t.position.z-car_.position.z)<3.6&&Math.abs(u.v)>3){u.v*=-.3;hp-=8}});
+  $('kmh').textContent=Math.round(Math.abs(u.v)*3.6);yaw+=(((u.h-yaw+PI*3)%(2*PI))-PI)*dt*(Math.abs(iy)>0?1.5:0)*0+0;
+  if(osc&&snd)gn.gain.value=.03,osc.frequency.value=45+Math.abs(u.v)*5;P.position.set(car_.position.x,.5,car_.position.z)}
+ else{if(gn)gn.gain.value=0;const sp=((K.ShiftLeft||run)&&en>5)?8:3.6,fx=-Math.sin(yaw),fz=-Math.cos(yaw),rx=Math.cos(yaw),rz=-Math.sin(yaw),wx=fx*iy+rx*ix,wz=fz*iy+rz*ix,m=Math.min(1,Math.hypot(wx,wz));
+  if(m>.05){P.position.x+=wx*sp*dt;P.position.z+=wz*sp*dt;P.rotation.y=Math.atan2(-wx,-wz);if(sp>5)en-=dt*6;const s=Math.sin(tt*(sp>5?14:9))*.6,u=P.userData;u.arms[0].rotation.x=s;u.arms[1].rotation.x=-s;u.feet[0].position.z=s*.3;u.feet[1].position.z=-s*.3}
+  if(K.Space&&P.position.y<=.55)vy=7;vy-=20*dt;P.position.y=Math.max(.5,P.position.y+vy*dt);if(P.position.y<=.5)vy=0;
+  P.position.x=Math.max(-15.5,Math.min(15.5,P.position.x));P.position.z=Math.max(ZMIN,Math.min(ZMAX+40,P.position.z));
+  if(punch>0){punch-=dt;P.userData.arms[1].rotation.x=-1.6}
+  traffic.forEach(t=>{if(Math.hypot(t.position.x-P.position.x,t.position.z-P.position.z)<2.4){hp-=dt*40}});}
+ if(en<100&&!K.ShiftLeft&&!run)en+=dt*2;if(hp<100)hp+=dt*.5;if(hp<=0){hp=100;money=Math.max(0,money-500);P.position.set(11,.5,92);if(car_)toggleCar()}
+ // traffic & peds
+ traffic.forEach(t=>{const u=t.userData;let sp=u.sp;[...traffic,...own].forEach(o=>{if(o!==t&&Math.abs(o.position.x-t.position.x)<2.5&&(o.position.z-t.position.z)*u.dir>0&&(o.position.z-t.position.z)*u.dir<14)sp=Math.min(sp,2)});
+  t.position.z+=u.dir*sp*dt;if(u.dir>0&&t.position.z>ZMAX+40)t.position.z=ZMIN;if(u.dir<0&&t.position.z<ZMIN)t.position.z=ZMAX+40;if(u.l)u.l[0].visible=Math.floor(tt*6)%2==0,u.l[1].visible=!u.l[0].visible});
+ peds.forEach(p=>{p.position.z+=p.userData.d*1.3*dt;if(p.position.z>ZMAX||p.position.z<ZMIN)p.userData.d*=-1;p.rotation.y=p.userData.d>0?PI:0;p.userData.arms[0].rotation.x=Math.sin(tt*6+p.id);p.userData.arms[1].rotation.x=-Math.sin(tt*6+p.id)});
+ // mission
+ const tp=car_||P;if(Math.hypot(tp.position.x-bc.position.x,tp.position.z-bc.position.z)<5){money+=500;newM()}
+ // camera
+ const tx=tp.position.x,tz=tp.position.z,dist=car_?11:7,cy=car_?3:1.6;if(car_){let dd=car_.userData.h-yaw;dd=Math.atan2(Math.sin(dd),Math.cos(dd));yaw+=dd*dt*(Math.abs(car_.userData.v)>2?2:0)}
+ cam.position.set(tx+Math.sin(yaw)*dist*Math.cos(pitch),cy+dist*Math.sin(pitch)+1,tz+Math.cos(yaw)*dist*Math.cos(pitch));cam.lookAt(tx,cy+.5,tz);
+ // hud
+ $('mny').textContent=money.toLocaleString();$('hp').style.width=Math.max(0,hp)+'%';$('en').style.width=Math.max(0,en)+'%';
+ const s=1.1;mm.clearRect(0,0,150,150);mm.save();mm.beginPath();mm.arc(75,75,75,0,7);mm.clip();mm.fillStyle='#3d3d3d';mm.fillRect(0,0,150,150);
+ const X=x=>75+(x-tx)*s,Z=z=>75+(z-tz)*s;mm.fillStyle='#222';mm.fillRect(X(-8),0,17*s,150);mm.fillStyle='#777';mm.fillRect(X(-16),0,8*s,150);mm.fillRect(X(8),0,8*s,150);mm.fillStyle='#555';mm.fillRect(0,0,X(-16),150);mm.fillRect(X(16),0,150,150);mm.fillStyle='#fd0';mm.fillRect(X(-.1),0,.3*s+1,150);
+ mm.fillStyle='#fc0';mm.beginPath();mm.arc(Math.max(8,Math.min(142,X(bc.position.x))),Math.max(8,Math.min(142,Z(bc.position.z))),5,0,7);mm.fill();
+ mm.fillStyle='#f55';traffic.forEach(t=>mm.fillRect(X(t.position.x)-2,Z(t.position.z)-3,4,6));mm.fillStyle='#8cf';own.forEach(t=>mm.fillRect(X(t.position.x)-2,Z(t.position.z)-3,4,6));
+ mm.translate(75,75);mm.rotate(-(car_?car_.userData.h:P.rotation.y));mm.fillStyle='#fff';mm.beginPath();mm.moveTo(0,-9);mm.lineTo(6,7);mm.lineTo(-6,7);mm.fill();mm.restore()}
+loop();
+</script></body></html>
