@@ -1,22 +1,10 @@
 config_version=4
-
 [application]
-config/name="CITY FREEDOM MAKKAH - NEW"
-run/main_scene="res://main.tscn"
-
+config/name="Eyad Rammah Razzam"
+run/main_scene="res://World.tscn"
 [display]
-window/size/width=800
-window/size/height=450
-window/handheld/orientation="landscape"
-window/stretch/mode="viewport"
-window/stretch/aspect="expand"
-
+window/size/width=1280
+window/size/height=720
 [rendering]
 quality/driver/driver_name="GLES2"
-quality/filters/msaa=0
-quality/intended_usage/framebuffer_allocation=2
-environment/default_environment=""
-vram_compression/import_etc=true
-
-[physics]
-common/physics_fps=40
+quality/driver/fallback_to_gles2=true
